@@ -1087,6 +1087,8 @@ def show(supabase):
     return
 
   st.subheader("📋 Historique Général & Consultation des PVs")
+  # Diagnostic temporaire : à supprimer une fois le problème de téléchargement réglé.
+  st.caption(f"🔎 Diagnostic : rôle lu = « {role} » | can_edit = {can_edit} | téléchargement autorisé = {peut_telecharger}")
 
   projet_id_actif = projets_config.projet_actif(user_info)
   if not projet_id_actif:
