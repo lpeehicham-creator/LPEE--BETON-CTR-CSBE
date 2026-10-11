@@ -87,6 +87,7 @@ def charger_projets(supabase, force=False):
                     "nom": row.get("nom") or row["id"],
                     "client": row.get("client") or "-",
                     "num_dossier": row.get("num_dossier") or "",
+                    "ref_pv": row.get("ref_pv") or "",
                     "intitule": row.get("intitule") or "",
                     "signataires": nettoyer_signataires(row.get("signataires")),
                     "cree_par": row.get("cree_par"),
@@ -121,7 +122,7 @@ def _slug_projet(nom):
     return s[:40]
 
 
-def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", signataires=None):
+def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", signataires=None, ref_pv=""):
     """Crée un chantier. Retourne (True, projet_id) ou (False, message).
     Réservé aux rôles admin / responsable_chantier (vérifié ici, pas
     seulement dans l'interface)."""
@@ -132,6 +133,7 @@ def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", s
     client = (client or "").strip()
     num_dossier = (num_dossier or "").strip()
     intitule = (intitule or "").strip()
+    ref_pv = (ref_pv or "").strip()
     signataires = nettoyer_signataires(signataires)
     if len(nom) < 3:
         return False, "Le nom du chantier doit contenir au moins 3 caractères."
@@ -164,6 +166,8 @@ def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", s
         ligne["signataires"] = signataires
         if intitule:  # colonne facultative : n'est envoyée que si renseignée
             ligne["intitule"] = intitule
+        if ref_pv:  # colonne facultative `ref_pv` (préfixe du « RE N° » des PV)
+            ligne["ref_pv"] = ref_pv
         supabase.table("projets").insert(ligne).execute()
     except Exception as e:
         return False, _msg_erreur_projets(e)
@@ -264,6 +268,17 @@ def chantier_pv(defaut_lgv, projet_id=None):
     if pid == PROJET_PAR_DEFAUT:
         return defaut_lgv
     return info.get("nom") or "-"
+
+
+def ref_pv(defaut_lgv, projet_id=None):
+    """Préfixe du « RE N° » des PV (ex. 25/260/LGV/ B/) : celui saisi à la
+    création du chantier ; pour LGV CASA SUD sans valeur, la valeur historique
+    `defaut_lgv` ; pour un autre chantier sans valeur, « - »."""
+    pid = projet_id or projet_actif(st.session_state.get("user") or {})
+    info = get_projets().get(pid) or {}
+    if info.get("ref_pv"):
+        return info["ref_pv"]
+    return defaut_lgv if pid == PROJET_PAR_DEFAUT else "-"
 
 
 def dossier_pv(defaut_lgv, projet_id=None):
@@ -370,7 +385,7 @@ def peut_supprimer_projet(user_info, projet_id):
 
 def _msg_erreur_projets(e):
     txt = str(e)
-    if "signataires" in txt or "intitule" in txt or "num_dossier" in txt:
+    if "signataires" in txt or "intitule" in txt or "num_dossier" in txt or "ref_pv" in txt:
         return ("Colonne manquante dans la table `projets` : exécutez le script "
                 f"ajout_table_projets.sql dans Supabase. ({txt})")
     return f"Erreur Supabase : {txt}"
@@ -381,7 +396,7 @@ def _projet_en_base(supabase, projet_id):
     return bool(res.data)
 
 
-def modifier_projet(supabase, projet_id, nom, client, num_dossier, intitule="", signataires=None):
+def modifier_projet(supabase, projet_id, nom, client, num_dossier, intitule="", signataires=None, ref_pv=None):
     """Modifie nom, client et N° de dossier. L'identifiant ne change jamais
     (les données y sont rattachées). Retourne (ok, message)."""
     user = st.session_state.get("user") or {}
@@ -410,6 +425,10 @@ def modifier_projet(supabase, projet_id, nom, client, num_dossier, intitule="", 
         if signataires is not None and signataires != (
                 (get_projets().get(projet_id) or {}).get("signataires") or []):
             valeurs["signataires"] = signataires
+        if ref_pv is not None:
+            ref_pv = (ref_pv or "").strip()
+            if ref_pv != ((get_projets().get(projet_id) or {}).get("ref_pv") or ""):
+                valeurs["ref_pv"] = ref_pv or None  # seulement si modifié
         supabase.table("projets").update(valeurs).eq("id", projet_id).execute()
     except Exception as e:
         return False, _msg_erreur_projets(e)
