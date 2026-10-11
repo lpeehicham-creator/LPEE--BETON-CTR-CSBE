@@ -1074,7 +1074,7 @@ def show(supabase):
   )
 
   if (
-      role not in ["laboratoire", "coordinateur_essais", "labo", "admin", "responsable_labo", "responsable_chantier", "qualite"]
+      role not in ["laboratoire", "coordinateur_essais", "labo", "admin", "responsable_labo", "responsable de chantier", "qualite"]
       and not is_admin
       and not can_edit
       and not est_resp_chantier
