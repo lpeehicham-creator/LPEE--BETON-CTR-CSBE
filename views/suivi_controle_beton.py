@@ -1027,39 +1027,49 @@ def afficher_module_validation_admin(supabase, est_admin=False, peut_valider=Fal
         use_container_width=True, hide_index=True, key=editor_key, on_change=_maj_resistance_admin,
     )
 
-    ep_28j = [ep for ep in ep_sel_list if extraire_nb_jours(ep.get("echeance")) == 28]
-    if ep_28j:
-        # Les lots sont séparés par échéance : on va chercher les éprouvettes
-        # à 7 jours du même bétonnage dans les autres lots.
-        ep_7j = [
-            ep
-            for (b_id_l, _ech_l), liste_l in lots_dict.items()
-            if b_id_l == b_id_sel
-            for ep in liste_l
-            if extraire_nb_jours(ep.get("echeance")) == 7
-        ]
-        ref_ctrl_sel = determiner_ref_controle(supabase, b_id_sel, info_b_sel, ep_sel_list[0])
+    # --- Rappel des écrasements précédents pour la même référence de béton ---
+    nb_jours_sel = extraire_nb_jours(echeance_sel)
+    ref_ctrl_sel = determiner_ref_controle(supabase, b_id_sel, info_b_sel, ep_sel_list[0])
+    ref_norm_sel = str(ref_ctrl_sel or "").strip().lower()
+
+    def _meme_reference(ep):
+        if ep.get("betonnage_id") == b_id_sel:
+            return True
+        ref_ep = str(ep.get("ref_controle") or "").strip().lower()
+        return bool(ref_norm_sel) and ref_norm_sel not in ("-", "none") and ref_ep == ref_norm_sel
+
+    ep_precedents = [
+        ep for ep in essais_realises
+        if _meme_reference(ep)
+        and extraire_nb_jours(ep.get("echeance")) < nb_jours_sel
+    ]
+    if ep_precedents:
         st.warning(
-            f"🔔 **Rappel avant validation à 28 jours** — Résultats à 7 jours"
-            f" déjà enregistrés pour ce même lot (Réf: {ref_ctrl_sel}) :"
+            f"🔔 **Rappel des écrasements précédents** — Réf: {ref_ctrl_sel} "
+            f"(avant l'échéance {echeance_sel})"
         )
-        if ep_7j:
-            rows_7j = []
-            for ep in ep_7j:
-                sec = section_normalisee(ep.get("section"))
-                f_kn = float(ep.get("force_kn") or 0.0)
-                type_essai_ep = str(ep.get("type_essai") or "Compression").strip()
-                forme_ep = str(ep.get("forme") or "Cylindrique 150x300").strip()
-                fc = float(ep.get("fc_mpa") or (calculer_resistance_mpa(f_kn, sec, type_essai=type_essai_ep, forme=forme_ep) if f_kn > 0 else 0.0))
-                rows_7j.append({
-                    "Repère": ep.get("repere_eprouvette", "-"),
-                    "Date Écrasement": ep.get("date_ecrasement", "-"),
-                    "Force (kN)": f_kn,
-                    "Résistance (MPa)": fc,
-                })
-            st.dataframe(pd.DataFrame(rows_7j), use_container_width=True, hide_index=True)
-        else:
-            st.caption("Aucun écrasement à 7 jours n'a encore été enregistré pour ce lot.")
+        rows_prec = []
+        for ep in sorted(ep_precedents, key=lambda e: (extraire_nb_jours(e.get("echeance")), str(e.get("repere_eprouvette")))):
+            sec = section_normalisee(ep.get("section"))
+            f_kn = float(ep.get("force_kn") or 0.0)
+            type_essai_ep = str(ep.get("type_essai") or "Compression").strip()
+            forme_ep = str(ep.get("forme") or "Cylindrique 150x300").strip()
+            fc = float(ep.get("fc_mpa") or (calculer_resistance_mpa(f_kn, sec, type_essai=type_essai_ep, forme=forme_ep) if f_kn > 0 else 0.0))
+            rows_prec.append({
+                "Échéance": ep.get("echeance", "-"),
+                "Repère": ep.get("repere_eprouvette", "-"),
+                "Date Écrasement": ep.get("date_ecrasement", "-"),
+                "Force (kN)": f_kn,
+                "Résistance (MPa)": fc,
+                "Statut PV": ep.get("statut_pv") or "⏳ En attente de validation",
+            })
+        df_prec = pd.DataFrame(rows_prec)
+        st.dataframe(df_prec, use_container_width=True, hide_index=True)
+        moyennes = df_prec[df_prec["Résistance (MPa)"] > 0].groupby("Échéance")["Résistance (MPa)"].mean()
+        if not moyennes.empty:
+            st.caption("📊 Moyenne par échéance : " + " | ".join(f"**{k}** : {v:.1f} MPa" for k, v in moyennes.items()))
+    elif nb_jours_sel > 1:
+        st.caption(f"ℹ️ Aucun écrasement antérieur à {echeance_sel} n'est enregistré pour la référence {ref_ctrl_sel}.")
 
     st.markdown("---")
     if not peut_valider:
