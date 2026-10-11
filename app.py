@@ -829,7 +829,7 @@ if page == "Accueil":
       except Exception as e:
         st.error(f"Erreur lors de la lecture de l'image : {e}")
     else:
-      st.warning("⚠️ L'image 'al_boraq.jpg' est introuvable à la racine.")
+      st.warning("⚠️ L'image 'Laboratoire LPEE sur chantier .JPG' est introuvable à la racine.")
 
   st.markdown("---")
   st.markdown(f"""
