@@ -43,7 +43,7 @@ def chemin_logo_lpee():
 
 
 def chemin_image_connexion():
-  """Chemin de « Page d'accueil.jpeg » (à côté de app.py), tolérant sur la
+  """Chemin de « image.page-d'accueil.jpg » (à côté de app.py), tolérant sur la
   casse, les espaces, l'apostrophe et l'extension (.jpeg/.jpg/.png)."""
   dossier = os.path.dirname(os.path.abspath(__file__))
   cible = {"pagedaccueil.jpeg", "pagedaccueil.jpg", "pagedaccueil.png"}
