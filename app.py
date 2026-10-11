@@ -814,7 +814,7 @@ if page == "Accueil":
   st.markdown("---")
   col1, col2, col3 = st.columns([1, 2, 1])
   with col2:
-    image_path = os.path.join(os.path.dirname(__file__), "Laboratoire LPEE sur chantier .JPG")
+    image_path = os.path.join(os.path.dirname(__file__), "LPEE sur chantier .JPG")
     if not os.path.exists(image_path):
       image_path = os.path.join(os.path.dirname(__file__), "LPEE")
 
@@ -823,13 +823,13 @@ if page == "Accueil":
         img = Image.open(image_path).convert("RGB")
         st.image(
             img,
-            caption="Laboratoire LPEE sur chantier .JPG",
+            caption="LPEE sur chantier .JPG",
             use_container_width=True,
         )
       except Exception as e:
         st.error(f"Erreur lors de la lecture de l'image : {e}")
     else:
-      st.warning("⚠️ L'image 'Laboratoire LPEE sur chantier .JPG' est introuvable à la racine.")
+      st.warning("⚠️ L'image 'LPEE sur chantier .JPG' est introuvable à la racine.")
 
   st.markdown("---")
   st.markdown(f"""
