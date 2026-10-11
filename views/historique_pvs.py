@@ -1063,11 +1063,21 @@ def show(supabase):
       or st.session_state.get("is_admin", False)
   )
   is_baallal_admin = str(user_info.get("username", "")).strip().upper() == "BAALLAL" and role == "admin"
+  role_norm = role.replace(" ", "_").replace("-", "_").strip()
+  est_resp_chantier = "responsable" in role_norm and "chantier" in role_norm
+  # Chaque responsable de chantier (et admin / labo / can_edit) peut télécharger PDF + Excel.
+  peut_telecharger = (
+      is_admin
+      or can_edit
+      or est_resp_chantier
+      or role_norm in ["laboratoire", "coordinateur_essais", "labo", "qualite"]
+  )
 
   if (
       role not in ["laboratoire", "coordinateur_essais", "labo", "admin", "responsable_labo", "responsable_chantier", "qualite"]
       and not is_admin
       and not can_edit
+      and not est_resp_chantier
   ):
     st.error("⛔ **Accès Restreint**")
     st.warning(
@@ -1343,26 +1353,34 @@ def show(supabase):
         date_fab_clean = formater_date_nom_fichier(date_coulee_h)
         nom_fichier_pv = f"PV_{nom_rec_clean}_{date_fab_clean}.pdf"
 
-        st.download_button(
-            label=f"📄 Télécharger le PV ({nom_fichier_pv})",
-            data=generer_pv_pdf(export_data_h, infos_header_h),
-            file_name=nom_fichier_pv,
-            mime="application/pdf",
-            use_container_width=True,
-            type="primary",
-            key="btn_download_hist",
-        )
-
-        if is_baallal_admin:
+        if not peut_telecharger:
+          st.info("🔒 Le téléchargement des PVs est réservé aux responsables de chantier et au laboratoire.")
+        else:
           nom_fichier_pv_xlsx = f"PV_{nom_rec_clean}_{date_fab_clean}.xlsx"
-          st.download_button(
-              label=f"📊 Télécharger le PV en Excel ({nom_fichier_pv_xlsx}) — BAALLAL",
-              data=generer_pv_excel(export_data_h, infos_header_h),
-              file_name=nom_fichier_pv_xlsx,
-              mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-              use_container_width=True,
-              key="btn_download_hist_excel",
-          )
+          col_pdf, col_xlsx = st.columns(2)
+          try:
+            col_pdf.download_button(
+                label=f"📄 Télécharger le PV en PDF ({nom_fichier_pv})",
+                data=generer_pv_pdf(export_data_h, infos_header_h),
+                file_name=nom_fichier_pv,
+                mime="application/pdf",
+                use_container_width=True,
+                type="primary",
+                key="btn_download_hist",
+            )
+          except Exception as e_pdf:
+            col_pdf.error(f"❌ Génération du PDF impossible : {e_pdf}")
+          try:
+            col_xlsx.download_button(
+                label=f"📊 Télécharger le PV en Excel ({nom_fichier_pv_xlsx})",
+                data=generer_pv_excel(export_data_h, infos_header_h),
+                file_name=nom_fichier_pv_xlsx,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="btn_download_hist_excel",
+            )
+          except Exception as e_xlsx:
+            col_xlsx.error(f"❌ Génération de l'Excel impossible : {e_xlsx}")
 
     st.markdown("---")
     st.markdown("##### 📊 Base de données globale")
