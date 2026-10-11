@@ -13,6 +13,20 @@ import qrcode
 from audit_log import enregistrer_modification, afficher_historique_modifications
 import projets_config
 
+REF_PV_DEFAUT = "25/260/LGV/ B/"
+
+
+def ref_pv_projet():
+  """Préfixe « RE N° » du PV propre au chantier actif (saisi à la création du
+  chantier). Retombe sur la valeur historique si le chantier n'en a pas."""
+  try:
+    fn = getattr(projets_config, "ref_pv", None)
+    val = fn(REF_PV_DEFAUT) if callable(fn) else None
+  except Exception:
+    val = None
+  val = str(val or "").strip()
+  return val if val else REF_PV_DEFAUT
+
 try:
     from supabase import create_client, Client
 except ImportError:
@@ -320,7 +334,7 @@ def generer_pv_excel(export_data, infos_header):
     ws["E1"] = "RE N° :"
     format_cell(ws["E1"], font_bold, align_left)
     ws.merge_cells("F1:G1")
-    ws["F1"] = remplacer_na(infos_header.get("re_num"), "25/260/LGV/ B/")
+    ws["F1"] = remplacer_na(infos_header.get("re_num"), ref_pv_projet())
     format_cell(ws["F1"], font_regular, align_left)
     
     ws["H1"] = "BETON"
