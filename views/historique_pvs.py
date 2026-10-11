@@ -116,6 +116,15 @@ def est_essai_fendage(item):
   return "fendage" in t or t.startswith("traction")
 
 
+TAILLE_LOT_COMPRESSION = 3
+
+
+def _cle_repere(repere):
+  """Clé de tri naturelle : TEST02/4 avant TEST02/10."""
+  m = re.search(r"(\d+)\s*$", str(repere or ""))
+  return (str(repere or "")[: m.start()] if m else str(repere or ""), int(m.group(1)) if m else 0)
+
+
 def trier_essais_pv(export_data, date_fab):
   """Regroupe les lignes par âge puis par type d'essai (compression avant
   traction), pour que chaque moyenne couvre des lignes contiguës."""
@@ -124,6 +133,7 @@ def trier_essais_pv(export_data, date_fab):
       key=lambda it: (
           calculer_age_jours(date_fab, it.get("date_essai"), it.get("age")),
           est_essai_fendage(it),
+          _cle_repere(it.get("repere_eprouvette")),
       ),
   )
 
@@ -317,6 +327,7 @@ def generer_pv_excel(export_data, infos_header):
 
   ligne_courante = 15
   groupes_lots = {}
+  compteur_lots = {}
   export_data = trier_essais_pv(export_data, date_fab_header)
   for item in export_data:
     fend = est_essai_fendage(item)
@@ -349,6 +360,10 @@ def generer_pv_excel(export_data, infos_header):
     set_cell(ligne_courante, col_autre, "-")
 
     cle = f"{age_val}_{dt_essai}_{'T' if fend else 'C'}"
+    if not fend:
+      rang = compteur_lots.get(cle, 0)
+      compteur_lots[cle] = rang + 1
+      cle = f"{cle}_lot{rang // TAILLE_LOT_COMPRESSION}"
     groupes_lots.setdefault(cle, {"lignes": [], "en_cours": is_en_cours, "age": age_val, "fend": fend})["lignes"].append(ligne_courante)
     ligne_courante += 1
 
@@ -370,7 +385,7 @@ def generer_pv_excel(export_data, infos_header):
       moy = round(sum(vals) / len(vals), 1) if vals else 0.0
       valeur_moy = f"{moy:.1f}"
       if int(age) >= 28 and not gdata["fend"]:
-        moyenne_28j_val = moy
+        moyenne_28j_val = moy if moyenne_28j_val is None else min(moyenne_28j_val, moy)
 
     if contigu and start_r != end_r:
       merge(start_r, 8, end_r, 8)
@@ -709,6 +724,7 @@ def generer_pv_pdf(export_data, infos_header):
 
   row_indices_body = []
   groupes_lots = {}
+  compteur_lots = {}
   export_data = trier_essais_pv(export_data, date_fab_header)
   for item in export_data:
     fend = est_essai_fendage(item)
@@ -756,6 +772,11 @@ def generer_pv_pdf(export_data, infos_header):
     fonts.append((0, r_idx, 7, r_idx, "Helvetica", 8.5, BLACK))
 
     cle = f"{age_val}_{dt_essai}_{'T' if fend else 'C'}"
+    if not fend:
+      # Une moyenne par lot de 3 éprouvettes de compression.
+      rang = compteur_lots.get(cle, 0)
+      compteur_lots[cle] = rang + 1
+      cle = f"{cle}_lot{rang // TAILLE_LOT_COMPRESSION}"
     groupes_lots.setdefault(
         cle, {"lignes": [], "en_cours": is_en_cours, "age": age_val, "fend": fend}
     )["lignes"].append(r_idx)
@@ -778,7 +799,7 @@ def generer_pv_pdf(export_data, infos_header):
       moy = round(sum(vals) / len(vals), 1) if vals else 0.0
       valeur_moy = f"{moy:.1f}"
       if int(age) >= 28 and not gdata["fend"]:
-        moyenne_28j_val = moy
+        moyenne_28j_val = moy if moyenne_28j_val is None else min(moyenne_28j_val, moy)
 
     if contigu and start_r != end_r:
       spans.append((7, start_r, 7, end_r))
@@ -1074,7 +1095,7 @@ def show(supabase):
   )
 
   if (
-      role not in ["laboratoire", "coordinateur_essais", "labo", "admin", "responsable_labo", "responsable de chantier", "qualite"]
+      role not in ["laboratoire", "coordinateur_essais", "labo", "admin", "responsable_labo", "responsable_chantier", "qualite"]
       and not is_admin
       and not can_edit
       and not est_resp_chantier
