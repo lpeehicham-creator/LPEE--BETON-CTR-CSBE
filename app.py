@@ -42,6 +42,23 @@ def chemin_logo_lpee():
   return None
 
 
+def chemin_image_connexion():
+  """Chemin de « Page d'accueil.jpeg » (à côté de app.py), tolérant sur la
+  casse, les espaces, l'apostrophe et l'extension (.jpeg/.jpg/.png)."""
+  dossier = os.path.dirname(os.path.abspath(__file__))
+  cible = {"pagedaccueil.jpeg", "pagedaccueil.jpg", "pagedaccueil.png"}
+  try:
+    for nom in os.listdir(dossier):
+      brut = nom.lower()
+      for c in (" ", "_", "-", "'", "\u2019", "`"):
+        brut = brut.replace(c, "")
+      if brut in cible:
+        return os.path.join(dossier, nom)
+  except OSError:
+    pass
+  return None
+
+
 def _charger_logo_lpee():
   chemin = chemin_logo_lpee()
   if not chemin:
@@ -503,19 +520,14 @@ if st.session_state["user"] is None:
   col1, col2, col3 = st.columns([1, 2, 1])
   with col2:
     st.markdown("<br><br>", unsafe_allow_html=True)
-    if _LOGO_LPEE is not None:
-      _lg1, _lg2, _lg3 = st.columns([1, 1, 1])
-      _lg2.image(_LOGO_LPEE, use_container_width=True)
-    st.title("🔐 Accès Restreint - LPEE")
-    st.caption("Veuillez saisir vos identifiants pour accéder à la plateforme.")
-
-    image_login_path = os.path.join(os.path.dirname(__file__), "image.page d'accueil.jpg")
-    if os.path.exists(image_login_path):
+    image_login_path = chemin_image_connexion()
+    if image_login_path:
       try:
-        img_login = Image.open(image_login_path).convert("RGB")
-        st.image(img_login, use_container_width=True)
+        st.image(Image.open(image_login_path).convert("RGB"), use_container_width=True)
       except Exception as e:
         st.error(f"Erreur lors de la lecture de l'image : {e}")
+    st.title("🔐 Accès Restreint - LPEE")
+    st.caption("Veuillez saisir vos identifiants pour accéder à la plateforme.")
 
     if st.session_state.get("pending_qr_rec") or st.session_state.get("pending_qr_bid"):
       st.info(
