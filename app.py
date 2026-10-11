@@ -1109,6 +1109,7 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
         [
             {
                 "N° de dossier": _reg[p].get("num_dossier") or "-",
+                "Réf. N° PV": _reg[p].get("ref_pv") or "-",
                 "Chantier": _reg[p]["nom"],
                 "Client": _reg[p]["client"],
                 "Identifiant": p,
@@ -1132,6 +1133,11 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
     nom_ch = st.text_input("Nom du chantier", placeholder="ex : Pont Oued Bouregreg")
     client_ch = st.text_input("Client", placeholder="ex : TGCC")
     dossier_ch = st.text_input("N° de dossier", placeholder="ex : 2026/0123")
+    ref_pv_ch = st.text_input(
+        "Réf. N° du PV (préfixe)",
+        placeholder="ex : 25/260/LGV/ B/",
+        help="Préfixe affiché dans la case « RE N° » des PV de ce chantier, devant la référence de contrôle.",
+    )
     intitule_ch = st.text_area(
         "Intitulé du chantier (facultatif)",
         placeholder="Texte complet affiché dans la case « Chantier » des PV",
@@ -1161,7 +1167,7 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
       else:
         ok, resultat = projets_config.creer_projet(
             supabase, nom_ch, client_ch, current_username, dossier_ch, intitule_ch,
-            signataires_ch
+            signataires_ch, ref_pv=ref_pv_ch
         )
         if not ok:
           st.error(f"❌ {resultat}")
@@ -1202,6 +1208,10 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
       nom_m = st.text_input("Nom du chantier", value=info_mod["nom"])
       client_m = st.text_input("Client", value=info_mod["client"])
       dossier_m = st.text_input("N° de dossier", value=info_mod.get("num_dossier") or "")
+      ref_pv_m = st.text_input(
+          "Réf. N° du PV (préfixe)", value=info_mod.get("ref_pv") or "",
+          placeholder="ex : 25/260/LGV/ B/",
+      )
       intitule_m = st.text_area(
           "Intitulé du chantier (affiché sur les PV)",
           value=info_mod.get("intitule") or "",
@@ -1227,7 +1237,8 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
       submit_m = st.form_submit_button("Enregistrer les modifications")
       if submit_m:
         ok_m, msg_m = projets_config.modifier_projet(
-            supabase, pid_mod, nom_m, client_m, dossier_m, intitule_m, signataires_m
+            supabase, pid_mod, nom_m, client_m, dossier_m, intitule_m, signataires_m,
+            ref_pv=ref_pv_m,
         )
         if ok_m:
           try:
@@ -1240,11 +1251,13 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
                 anciennes_valeurs={
                     "nom": info_mod["nom"], "client": info_mod["client"],
                     "num_dossier": info_mod.get("num_dossier") or "",
+                    "ref_pv": info_mod.get("ref_pv") or "",
                     "signataires": info_mod.get("signataires") or [],
                 },
                 nouvelles_valeurs={
                     "nom": nom_m.strip(), "client": client_m.strip(),
                     "num_dossier": dossier_m.strip(),
+                    "ref_pv": ref_pv_m.strip(),
                     "signataires": projets_config.nettoyer_signataires(signataires_m),
                 },
             )
