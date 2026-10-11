@@ -18,6 +18,20 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
 import projets_config
 
+REF_PV_DEFAUT = "25/260/LGV/ B/"
+
+
+def ref_pv_projet():
+  """Préfixe « RE N° » du PV propre au chantier actif (saisi à la création du
+  chantier). Retombe sur la valeur historique si le chantier n'en a pas."""
+  try:
+    fn = getattr(projets_config, "ref_pv", None)
+    val = fn(REF_PV_DEFAUT) if callable(fn) else None
+  except Exception:
+    val = None
+  val = str(val or "").strip()
+  return val if val else REF_PV_DEFAUT
+
 
 # ==============================================================================
 # 1. GESTION UTILISATEURS & SUPABASE
@@ -220,7 +234,7 @@ def generer_pv_excel(export_data, infos_header):
   set_cell(1, 1, "LPEE / CTR CSB", bold=True, size=11, fill=DARK_FILL, color="FFFFFF")
   set_cell(1, 5, "RE N° :", bold=True)
   merge(1, 6, 1, 7)
-  set_cell(1, 6, clean_na(infos_header.get("re_num"), "25/260/LGV/ B/"), bold=True, align="right")
+  set_cell(1, 6, clean_na(infos_header.get("re_num"), ref_pv_projet()), bold=True, align="right")
   ref_h1 = clean_na(
       infos_header.get("num_reception")
       or infos_header.get("ref_controle")
@@ -523,7 +537,7 @@ def generer_pv_pdf(export_data, infos_header):
   r = blank_row()
   r[0] = "LPEE / CTR CSB"
   r[4] = "RE N° :"
-  r[5] = clean_na(infos_header.get("re_num"), "25/260/LGV/ B/")
+  r[5] = clean_na(infos_header.get("re_num"), ref_pv_projet())
   ref_h1 = clean_na(
       infos_header.get("num_reception")
       or infos_header.get("ref_controle")
@@ -1337,7 +1351,7 @@ def show(supabase):
         )
 
         infos_header_h = {
-            "re_num": "25/260/LGV/ B/",
+            "re_num": ref_pv_projet(),
             "dossier": projets_config.dossier_pv("2025-260-05985-2025-0247"),
             "client": projets_config.client_projet(),
             "num_reception": ref_ctrl_h,
