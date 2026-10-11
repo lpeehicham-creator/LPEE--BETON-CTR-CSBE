@@ -28,9 +28,35 @@ except ImportError:
 # ==========================================
 # 1. CONFIGURATION DE LA PAGE & INJECTION PWA
 # ==========================================
+def chemin_logo_lpee():
+  """Chemin du logo LPEE (à côté de app.py), quelle que soit la casse ou
+  l'écriture du nom : « logo lpee.jpg », « Logo_LPEE.JPG », etc. None si absent."""
+  dossier = os.path.dirname(os.path.abspath(__file__))
+  cible = {"logolpee.jpg", "logolpee.jpeg", "logolpee.png"}
+  try:
+    for nom in os.listdir(dossier):
+      if nom.lower().replace(" ", "").replace("_", "").replace("-", "") in cible:
+        return os.path.join(dossier, nom)
+  except OSError:
+    pass
+  return None
+
+
+def _charger_logo_lpee():
+  chemin = chemin_logo_lpee()
+  if not chemin:
+    return None
+  try:
+    return Image.open(chemin).convert("RGB")
+  except Exception:
+    return None
+
+
+_LOGO_LPEE = _charger_logo_lpee()
+
 st.set_page_config(
     page_title="LPEE - CTR-CSB",
-    page_icon="🏗️",
+    page_icon=_LOGO_LPEE if _LOGO_LPEE is not None else "🏗️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -477,6 +503,9 @@ if st.session_state["user"] is None:
   col1, col2, col3 = st.columns([1, 2, 1])
   with col2:
     st.markdown("<br><br>", unsafe_allow_html=True)
+    if _LOGO_LPEE is not None:
+      _lg1, _lg2, _lg3 = st.columns([1, 1, 1])
+      _lg2.image(_LOGO_LPEE, use_container_width=True)
     st.title("🔐 Accès Restreint - LPEE")
     st.caption("Veuillez saisir vos identifiants pour accéder à la plateforme.")
 
@@ -605,6 +634,8 @@ except ImportError as e:
 
 # Menu latéral (Sidebar)
 with st.sidebar:
+  if _LOGO_LPEE is not None:
+    st.image(_LOGO_LPEE, use_container_width=True)
   st.title("LPEE - CTR-CSB")
   current_role = st.session_state["role"]
 
