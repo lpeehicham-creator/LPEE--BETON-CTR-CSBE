@@ -816,7 +816,7 @@ if page == "Accueil":
   with col2:
     image_path = os.path.join(os.path.dirname(__file__), "Laboratoire LPEE sur chantier .JPG")
     if not os.path.exists(image_path):
-      image_path = os.path.join(os.path.dirname(__file__), "Laboratoire LPEE sur chantier .JPG")
+      image_path = os.path.join(os.path.dirname(__file__), "LPEE")
 
     if os.path.exists(image_path):
       try:
