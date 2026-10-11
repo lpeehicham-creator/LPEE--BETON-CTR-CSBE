@@ -823,7 +823,7 @@ if page == "Accueil":
         img = Image.open(image_path).convert("RGB")
         st.image(
             img,
-            caption="Al Boraq - Ligne à Grande Vitesse",
+            caption="Laboratoire LPEE sur chantier .JPG",
             use_container_width=True,
         )
       except Exception as e:
