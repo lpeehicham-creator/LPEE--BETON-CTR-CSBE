@@ -171,7 +171,7 @@ class LPEEPDFReport(FPDF):
     self.cell(
         0,
         6,
-        "CENTRE TECHNIQUE RÉGIONAL -  (CTR-CSB)",
+        "CENTRE TECHNIQUE RÉGIONAL - LGV CASA SUD (CTR-CSB)",
         border=False,
         new_x="LMARGIN",
         new_y="NEXT",
