@@ -126,6 +126,12 @@ def section_normalisee(valeur_brute, defaut=176.71):
 # ==============================================================================
 # 1. GESTION DES UTILISATEURS ET CONNEXION SUPABASE
 # ==============================================================================
+def role_autorise_validation(role):
+    """True si le rôle correspond à un responsable de chantier ou à un admin."""
+    r = str(role or "").lower().replace("_", " ").replace("-", " ").strip()
+    return "responsable" in r and "chantier" in r or r == "admin"
+
+
 def connecter_utilisateur(supabase, nom_utilisateur, mot_de_passe):
     """Vérifie l'utilisateur et initialise le session_state."""
     try:
@@ -144,7 +150,7 @@ def connecter_utilisateur(supabase, nom_utilisateur, mot_de_passe):
                 "username": u.get("username"),
                 "role": u.get("role"),
                 "user_role": u.get("role"),
-                "can_edit": bool(u.get("can_edit", False)),
+                "can_edit": bool(u.get("can_edit", False)) or role_autorise_validation(u.get("role")),
             })
             return True
         st.error("Nom d'utilisateur ou mot de passe incorrect.")
@@ -1175,7 +1181,11 @@ def show(supabase):
 
     user_info = st.session_state.get("user", {})
     role_user = str(st.session_state.get("user_role") or st.session_state.get("role") or user_info.get("role", "")).lower()
-    can_edit = st.session_state.get("can_edit", False) or bool(user_info.get("can_edit", False))
+    can_edit = (
+        st.session_state.get("can_edit", False)
+        or bool(user_info.get("can_edit", False))
+        or role_autorise_validation(role_user)
+    )
 
     current_username = str(
         st.session_state.get("username")
