@@ -88,6 +88,7 @@ def charger_projets(supabase, force=False):
                     "client": row.get("client") or "-",
                     "num_dossier": row.get("num_dossier") or "",
                     "ref_pv": row.get("ref_pv") or "",
+                    "type_labo": row.get("type_labo") or "",
                     "intitule": row.get("intitule") or "",
                     "signataires": nettoyer_signataires(row.get("signataires")),
                     "cree_par": row.get("cree_par"),
@@ -122,7 +123,7 @@ def _slug_projet(nom):
     return s[:40]
 
 
-def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", signataires=None, ref_pv=""):
+def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", signataires=None, ref_pv="", type_labo=""):
     """Crée un chantier. Retourne (True, projet_id) ou (False, message).
     Réservé aux rôles admin / responsable_chantier (vérifié ici, pas
     seulement dans l'interface)."""
@@ -134,6 +135,7 @@ def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", s
     num_dossier = (num_dossier or "").strip()
     intitule = (intitule or "").strip()
     ref_pv = (ref_pv or "").strip()
+    type_labo = (type_labo or "").strip()
     signataires = nettoyer_signataires(signataires)
     if len(nom) < 3:
         return False, "Le nom du chantier doit contenir au moins 3 caractères."
@@ -168,6 +170,8 @@ def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", s
             ligne["intitule"] = intitule
         if ref_pv:  # colonne facultative `ref_pv` (préfixe du « RE N° » des PV)
             ligne["ref_pv"] = ref_pv
+        if type_labo and type_labo != TYPE_LABO_DEFAUT:  # colonne facultative `type_labo`
+            ligne["type_labo"] = type_labo
         supabase.table("projets").insert(ligne).execute()
     except Exception as e:
         return False, _msg_erreur_projets(e)
@@ -268,6 +272,18 @@ def chantier_pv(defaut_lgv, projet_id=None):
     if pid == PROJET_PAR_DEFAUT:
         return defaut_lgv
     return info.get("nom") or "-"
+
+
+TYPES_LABO = ["Laboratoire de Contrôle Externe", "Laboratoire de Contrôle Extérieur"]
+TYPE_LABO_DEFAUT = TYPES_LABO[0]
+
+
+def type_labo(projet_id=None):
+    """Intitulé du laboratoire affiché sur les PV de béton du chantier
+    (« Laboratoire de Contrôle Externe » par défaut)."""
+    pid = projet_id or projet_actif(st.session_state.get("user") or {})
+    valeur = ((get_projets().get(pid) or {}).get("type_labo") or "").strip()
+    return valeur if valeur in TYPES_LABO else TYPE_LABO_DEFAUT
 
 
 def ref_pv(defaut_lgv, projet_id=None):
@@ -385,7 +401,7 @@ def peut_supprimer_projet(user_info, projet_id):
 
 def _msg_erreur_projets(e):
     txt = str(e)
-    if "signataires" in txt or "intitule" in txt or "num_dossier" in txt or "ref_pv" in txt:
+    if "signataires" in txt or "intitule" in txt or "num_dossier" in txt or "ref_pv" in txt or "type_labo" in txt:
         return ("Colonne manquante dans la table `projets` : exécutez le script "
                 f"ajout_table_projets.sql dans Supabase. ({txt})")
     return f"Erreur Supabase : {txt}"
@@ -396,7 +412,7 @@ def _projet_en_base(supabase, projet_id):
     return bool(res.data)
 
 
-def modifier_projet(supabase, projet_id, nom, client, num_dossier, intitule="", signataires=None, ref_pv=None):
+def modifier_projet(supabase, projet_id, nom, client, num_dossier, intitule="", signataires=None, ref_pv=None, type_labo=None):
     """Modifie nom, client et N° de dossier. L'identifiant ne change jamais
     (les données y sont rattachées). Retourne (ok, message)."""
     user = st.session_state.get("user") or {}
@@ -429,6 +445,11 @@ def modifier_projet(supabase, projet_id, nom, client, num_dossier, intitule="", 
             ref_pv = (ref_pv or "").strip()
             if ref_pv != ((get_projets().get(projet_id) or {}).get("ref_pv") or ""):
                 valeurs["ref_pv"] = ref_pv or None  # seulement si modifié
+        if type_labo is not None:
+            type_labo = (type_labo or "").strip()
+            actuel = (get_projets().get(projet_id) or {}).get("type_labo") or ""
+            if type_labo != (actuel or TYPE_LABO_DEFAUT):
+                valeurs["type_labo"] = None if type_labo == TYPE_LABO_DEFAUT else type_labo
         supabase.table("projets").update(valeurs).eq("id", projet_id).execute()
     except Exception as e:
         return False, _msg_erreur_projets(e)
