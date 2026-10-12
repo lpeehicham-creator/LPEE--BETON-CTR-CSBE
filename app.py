@@ -879,7 +879,7 @@ def render_view(module, supabase_client):
 # ==========================================
 if page == "Accueil":
   _nom_proj = projets_config.nom_projet(projets_config.projet_actif(st.session_state["user"]))
-  st.title(f"🚚💧 Accueil - {_nom_proj}🌡️🧱🚚")
+  st.title(f"🚚💧🌡️ Accueil - {_nom_proj}🔨🧱🔬")
   st.markdown("### Plateforme de Suivi et Contrôle Qualité - LPEE")
 
   st.markdown("---")
