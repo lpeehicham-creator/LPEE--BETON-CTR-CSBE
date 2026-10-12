@@ -33,6 +33,16 @@ def ref_pv_projet():
   return val if val else REF_PV_DEFAUT
 
 
+def type_labo_pv():
+  """Intitulé « Laboratoire de Contrôle … » choisi à la création du chantier."""
+  try:
+    fn = getattr(projets_config, "type_labo", None)
+    val = fn() if callable(fn) else None
+  except Exception:
+    val = None
+  return str(val or "").strip() or "Laboratoire de Contrôle Externe"
+
+
 # ==============================================================================
 # 1. GESTION UTILISATEURS & SUPABASE
 # ==============================================================================
@@ -244,7 +254,7 @@ def generer_pv_excel(export_data, infos_header):
   set_cell(1, 8, ref_h1, bold=True, align="left")
 
   merge(2, 1, 3, 4)
-  set_cell(2, 1, "Laboratoire de Contrôle Externe", bold=True, fill=DARK_FILL, color="FFFFFF")
+  set_cell(2, 1, clean_na(infos_header.get("type_labo"), type_labo_pv()), bold=True, fill=DARK_FILL, color="FFFFFF")
   set_cell(2, 5, "DOSSIER :", bold=True)
   merge(2, 6, 2, 8)
   set_cell(2, 6, clean_na(infos_header.get("dossier"), projets_config.dossier_pv("2025-260-05985-2025-0247")))
@@ -556,7 +566,7 @@ def generer_pv_pdf(export_data, infos_header):
   aligns.append((7, row0, 7, row0, "LEFT"))
 
   r = blank_row()
-  r[0] = "Laboratoire de Contrôle Externe"
+  r[0] = clean_na(infos_header.get("type_labo"), type_labo_pv())
   r[4] = "DOSSIER :"
   r[5] = clean_na(infos_header.get("dossier"), projets_config.dossier_pv("2025-260-05985-2025-0247"))
   data.append(r)
@@ -960,7 +970,7 @@ def generer_pv_pdf(export_data, infos_header):
       img = RLImage(logo_path, width=logo_w, height=logo_h)
       col_logo = logo_w + 10
       cellule = Table(
-          [[img, P("Laboratoire de Contrôle Externe", size=9, bold=True, color=WHITE)]],
+          [[img, P(str(clean_na(infos_header.get("type_labo"), type_labo_pv())), size=9, bold=True, color=WHITE)]],
           colWidths=[col_logo, larg_bloc - col_logo],
           rowHeights=[haut_bloc],
       )
@@ -1352,6 +1362,7 @@ def show(supabase):
 
         infos_header_h = {
             "re_num": ref_pv_projet(),
+            "type_labo": type_labo_pv(),
             "dossier": projets_config.dossier_pv("2025-260-05985-2025-0247"),
             "client": projets_config.client_projet(),
             "num_reception": ref_ctrl_h,
