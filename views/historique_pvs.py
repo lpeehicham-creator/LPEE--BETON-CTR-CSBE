@@ -1479,6 +1479,8 @@ def show(supabase):
         "date_ecrasement",
         "fc_mpa",
         "technicien",
+        "saisi_par",
+        "valide_par",
     ]
     exclus = {
         "forme",
@@ -1495,7 +1497,7 @@ def show(supabase):
         c
         for c in cols_ordre
         + [c for c in df_all.columns if c not in cols_ordre]
-        if c not in exclus
+        if c not in exclus and c in df_all.columns
     ]
     df_final = df_all[cols_finales]
 
