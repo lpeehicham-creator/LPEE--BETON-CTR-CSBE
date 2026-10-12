@@ -695,9 +695,13 @@ with st.sidebar:
         "Suivi de Bétonnage",
         "Synthèse Béton",
     ]
-  elif current_role in ["laboratoire", "technicien", "coordinateur_essais"]:
+  elif current_role in ["laboratoire", "technicien", "coordinateur_essais", "responsable_dossier", "ingenieur_dossier"]:
     if current_role == "coordinateur_essais":
       st.info("Rôle : **COORDINATEUR DES ESSAIS**")
+    elif current_role == "responsable_dossier":
+      st.info("Rôle : **RESPONSABLE DE DOSSIER**")
+    elif current_role == "ingenieur_dossier":
+      st.info("Rôle : **L'INGÉNIEUR CHARGÉ DE DOSSIER**")
     elif current_username == "HANINE":
       st.info("Rôle : **RESPONSABLE DE DOSSIER**")
     elif current_username == "AMINA":
@@ -956,7 +960,7 @@ elif page == "Gestion Utilisateurs" and current_role == "admin":
         ' **MOTS_DE_PASSE_MAITRES = "non"** dans les secrets Streamlit.'
     )
 
-  ROLES_LIST = ["laboratoire", "coordinateur_essais", "restricted_betonnage", "responsable_chantier", "admin", "user"]
+  ROLES_LIST = ["laboratoire", "coordinateur_essais", "responsable_dossier", "ingenieur_dossier", "restricted_betonnage", "responsable_chantier", "admin", "user"]
   _registre = projets_config.get_projets()
   PROJETS_LIST = list(_registre.keys())
   PROJETS_LABELS = {
