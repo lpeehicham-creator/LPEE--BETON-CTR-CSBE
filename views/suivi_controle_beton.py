@@ -27,6 +27,16 @@ def ref_pv_projet():
   val = str(val or "").strip()
   return val if val else REF_PV_DEFAUT
 
+
+def type_labo_pv():
+  """Intitulé « Laboratoire de Contrôle … » choisi à la création du chantier."""
+  try:
+    fn = getattr(projets_config, "type_labo", None)
+    val = fn() if callable(fn) else None
+  except Exception:
+    val = None
+  return str(val or "").strip() or "Laboratoire de Contrôle Externe"
+
 try:
     from supabase import create_client, Client
 except ImportError:
@@ -324,7 +334,7 @@ def generer_pv_excel(export_data, infos_header):
     format_cell(ws["A1"], font_bold_white, align_center)
 
     ws.merge_cells("A2:D3")
-    ws["A2"] = "Laboratoire de Contrôle Externe"
+    ws["A2"] = remplacer_na(infos_header.get("type_labo"), type_labo_pv())
     format_cell(ws["A2"], font_bold_white, align_center)
 
     for r in range(1, 4):
