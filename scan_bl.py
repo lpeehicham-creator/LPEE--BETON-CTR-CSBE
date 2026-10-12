@@ -225,6 +225,17 @@ def _texte_reponse(reponse):
     raise ScanBLError("Réponse vide de l'IA. Reprenez une photo plus nette et réessayez.")
 
 
+def _delai_reessai(message):
+    """Secondes d'attente conseillées par Google dans un message 429 (None si absent)."""
+    m = re.search(r"retry in ([\d.]+)\s*s", message or "", re.I) or re.search(
+        r"retryDelay\W+([\d.]+)\s*s", message or "", re.I
+    )
+    try:
+        return float(m.group(1)) if m else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _erreur_inattendue(e):
     nom = type(e).__name__.lower()
     if "timeout" in nom:
@@ -246,9 +257,11 @@ def _generer(client, types, errors, modeles, image_part, invite):
     variantes.append({})
 
     dernier_refus = None
+    quota_atteint = False
     for modele in modeles:
         for variante in variantes:
             serveur = 0
+            attente_quota = 0
             while True:
                 try:
                     options = {"system_instruction": CONSIGNES, "response_mime_type": "application/json"}
@@ -271,10 +284,16 @@ def _generer(client, types, errors, modeles, image_part, invite):
                             "l'API Gemini (Generative Language) est autorisée pour cette clé."
                         )
                     if code == 429:
-                        raise ScanBLError(
-                            "Quota Gemini atteint (limite du palier gratuit ou crédit épuisé). "
-                            "Patientez une minute ou vérifiez la facturation du projet Google."
-                        )
+                        # Quota PAR MODÈLE : un modèle « pro » a souvent un quota gratuit
+                        # nul ou très bas alors que le modèle « flash » reste disponible.
+                        delai = _delai_reessai(message)
+                        if delai is not None and delai <= 10 and attente_quota < 1:
+                            attente_quota += 1       # limite par minute : une courte attente
+                            sleep(delai + 1)
+                            continue
+                        quota_atteint = True         # sinon : on passe au modèle suivant
+                        dernier_refus = e
+                        break
                     if code == 404:          # modèle introuvable : modèle suivant
                         dernier_refus = e
                         break
@@ -291,8 +310,14 @@ def _generer(client, types, errors, modeles, image_part, invite):
                     break
                 except Exception as e:
                     raise _erreur_inattendue(e)
-            if dernier_refus is not None and getattr(dernier_refus, "code", None) == 404:
+            if dernier_refus is not None and getattr(dernier_refus, "code", None) in (404, 429):
                 break                        # inutile d'essayer les autres variantes de ce modèle
+    if quota_atteint:
+        raise ScanBLError(
+            "Quota Gemini atteint sur tous les modèles essayés (limite du palier gratuit ou crédit "
+            "épuisé). Patientez une minute, décochez « lecture renforcée », ou vérifiez la "
+            "facturation du projet Google."
+        )
     if dernier_refus is not None and getattr(dernier_refus, "code", None) == 404:
         raise ScanBLError(
             "Modèle Gemini introuvable. Indiquez un modèle valide avec le secret GEMINI_MODEL_SCAN."
