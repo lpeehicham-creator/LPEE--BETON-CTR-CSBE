@@ -28,17 +28,31 @@ ROLES_CREATEURS_PROJET = ("admin", "responsable_chantier")
 # ------------------------------------------------------------------------------
 # SIGNATAIRES DES PV (propres à chaque chantier)
 # ------------------------------------------------------------------------------
-FONCTIONS_SIGNATAIRES = ("Chef de laboratoire", "Responsable d'essai", "Coordinateur d'essai")
-MAX_SIGNATAIRES = 3
+FONCTIONS_SIGNATAIRES = (
+    "Chef de laboratoire",
+    "Responsable d'essai",
+    "Coordinateur d'essai",
+    "L'ingénieur chargé de dossier",
+    "Responsable de dossier",
+)
+MAX_SIGNATAIRES = 5
 # Intitulé de la case de visa sur le PV (celui de « Chef de laboratoire » est
 # conservé tel qu'il figurait déjà sur les PV de LGV CASA SUD)
 _TITRES_VISA = {
     "Chef de laboratoire": "Visa Chef du laboratoire",
     "Responsable d'essai": "Visa Responsable d'essai",
     "Coordinateur d'essai": "Visa Coordinateur d'essai",
+    "L'ingénieur chargé de dossier": "Visa Ingénieur chargé de dossier",
+    "Responsable de dossier": "Visa Responsable de dossier",
 }
 # Ordre d'affichage sur le PV, de gauche à droite
-_ORDRE_VISA = ("Responsable d'essai", "Coordinateur d'essai", "Chef de laboratoire")
+_ORDRE_VISA = (
+    "L'ingénieur chargé de dossier",
+    "Responsable de dossier",
+    "Responsable d'essai",
+    "Coordinateur d'essai",
+    "Chef de laboratoire",
+)
 # Signataires historiques de LGV CASA SUD (repris tant qu'aucun n'est enregistré)
 SIGNATAIRES_LGV = [
     {"nom": "O.IKKEN", "fonction": "Responsable d'essai"},
@@ -330,7 +344,13 @@ def visas_pv(projet_id=None):
 
 def colonnes_visas(n):
     """Colonnes Excel (1 à 8, début-fin) occupées par n cases de visa."""
-    return {1: [(3, 6)], 2: [(2, 4), (6, 8)], 3: [(1, 2), (4, 5), (7, 8)]}[max(1, min(n, 3))]
+    return {
+        1: [(3, 6)],
+        2: [(2, 4), (6, 8)],
+        3: [(1, 2), (4, 5), (7, 8)],
+        4: [(1, 2), (3, 4), (5, 6), (7, 8)],
+        5: [(1, 2), (3, 4), (5, 5), (6, 7), (8, 8)],
+    }[max(1, min(n, 5))]
 
 
 def nom_signataire(fonction, projet_id=None):
