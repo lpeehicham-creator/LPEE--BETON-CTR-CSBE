@@ -1121,11 +1121,11 @@ def show(supabase):
       is_admin
       or can_edit
       or est_resp_chantier
-      or role_norm in ["laboratoire", "coordinateur_essais", "labo", "qualite"]
+      or role_norm in ["laboratoire", "coordinateur_essais", "responsable_dossier", "ingenieur_dossier", "labo", "qualite"]
   )
 
   if (
-      role not in ["laboratoire", "coordinateur_essais", "labo", "admin", "responsable_labo", "responsable_chantier", "qualite"]
+      role not in ["laboratoire", "coordinateur_essais", "responsable_dossier", "ingenieur_dossier", "labo", "admin", "responsable_labo", "responsable_chantier", "qualite"]
       and not is_admin
       and not can_edit
       and not est_resp_chantier
