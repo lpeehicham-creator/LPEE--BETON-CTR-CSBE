@@ -40,6 +40,75 @@ def configurer_acces_terrain(supabase_client):
     return configure
 
 
+# ---------------------------------------------------------------------------
+# Traçabilité : le nom d'utilisateur de la session est inscrit automatiquement
+# dans la colonne `saisi_par` à chaque création / modification d'un bétonnage.
+# Si la colonne n'existe pas encore en base (voir ajout_colonne_saisi_par.sql),
+# la traçabilité est simplement désactivée, sans erreur.
+# ---------------------------------------------------------------------------
+TABLE_TRACEE = "suivi_betonnage"
+
+
+def _colonne_trace_disponible(supabase):
+    cache = st.session_state.get("_trace_col_betonnage")
+    if cache is not None:
+        return cache
+    try:
+        supabase.table(TABLE_TRACEE).select("saisi_par").limit(1).execute()
+        dispo = True
+    except Exception:
+        dispo = False
+    st.session_state["_trace_col_betonnage"] = dispo
+    return dispo
+
+
+class _TableTracee:
+    def __init__(self, table, utilisateur):
+        self._table, self._user = table, utilisateur
+
+    def _marquer(self, payload):
+        if isinstance(payload, list):
+            return [self._marquer(p) for p in payload]
+        if isinstance(payload, dict):
+            return {**payload, "saisi_par": self._user}
+        return payload
+
+    def insert(self, payload, *a, **k):
+        return self._table.insert(self._marquer(payload), *a, **k)
+
+    def update(self, payload, *a, **k):
+        return self._table.update(self._marquer(payload), *a, **k)
+
+    def upsert(self, payload, *a, **k):
+        return self._table.upsert(self._marquer(payload), *a, **k)
+
+    def __getattr__(self, nom):
+        return getattr(self._table, nom)
+
+
+class _SupabaseTrace:
+    def __init__(self, client, utilisateur):
+        self._client, self._user = client, utilisateur
+
+    def table(self, nom):
+        t = self._client.table(nom)
+        return _TableTracee(t, self._user) if nom == TABLE_TRACEE else t
+
+    def __getattr__(self, nom):
+        return getattr(self._client, nom)
+
+
+def avec_tracabilite(supabase):
+    """Renvoie un client Supabase qui marque automatiquement les écritures."""
+    if isinstance(supabase, _SupabaseTrace):
+        return supabase
+    user = st.session_state.get("user") or {}
+    utilisateur = str(user.get("username") or st.session_state.get("username") or "").strip()
+    if not utilisateur or not _colonne_trace_disponible(supabase):
+        return supabase
+    return _SupabaseTrace(supabase, utilisateur)
+
+
 def show(supabase):
     st.title("🏗️ Suivi et Contrôle Qualité Béton")
 
@@ -47,6 +116,7 @@ def show(supabase):
     # La configuration est répétée ici pour couvrir les clients recréés après
     # une reconnexion Streamlit ou une synchronisation hors ligne.
     configurer_acces_terrain(supabase)
+    supabase = avec_tracabilite(supabase)
 
     # Valeurs lues par le scan du BL : à appliquer AVANT la création des champs
     # du formulaire (Streamlit n'autorise la modification d'un champ qu'avant son affichage).
@@ -264,6 +334,7 @@ def show(supabase):
                 "nb_eprouvettes": "Nb Éprouvettes",
                 "observations": "Observations",
                 "technicien": "Technicien",
+                "saisi_par": "👤 Saisi par",
                 "meteo": "Météo"
             })
 
@@ -271,6 +342,9 @@ def show(supabase):
             desired_first_cols = ["ID", "Date Livraison", "N° BL", "Nb Éprouvettes"]
             remaining_cols = [c for c in df.columns if c not in desired_first_cols]
             
+            if "👤 Saisi par" in remaining_cols and "Technicien" in remaining_cols:
+                remaining_cols.remove("👤 Saisi par")
+                remaining_cols.insert(remaining_cols.index("Technicien") + 1, "👤 Saisi par")
             final_cols = [c for c in desired_first_cols if c in df.columns] + remaining_cols
             df = df[final_cols]
 
