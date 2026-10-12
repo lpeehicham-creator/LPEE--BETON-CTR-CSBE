@@ -883,8 +883,9 @@ def generate_excel_synthesis_betonnage(
 
   ws.column_dimensions["A"].width = 14
   ws.column_dimensions["B"].width = 12
-  ws.column_dimensions["C"].width = 11.22
-  ws.column_dimensions["D"].width = 40.0
+  # Bilan mensuel : largeurs des colonnes C et D inversées
+  ws.column_dimensions["C"].width = 40.0 if is_mensuel else 11.22
+  ws.column_dimensions["D"].width = 11.22 if is_mensuel else 40.0
   ws.column_dimensions["E"].width = 11.22
   ws.column_dimensions["F"].width = 11.22
   ws.column_dimensions["G"].width = 11.22
@@ -897,7 +898,7 @@ def generate_excel_synthesis_betonnage(
   return output.getvalue()
 
 
-def generate_excel_synthesis_controle(df_data, titre_periode):
+def generate_excel_synthesis_controle(df_data, titre_periode, is_mensuel=False):
   output = io.BytesIO()
   wb = openpyxl.Workbook()
   ws = wb.active
@@ -1231,8 +1232,11 @@ def generate_excel_synthesis_controle(df_data, titre_periode):
   ws.row_dimensions[row_idx].height = 20
 
   ws.column_dimensions["A"].width = 14
-  ws.column_dimensions["C"].width = 40.0
-  cols_12 = ["B", "D", "E", "F", "G", "H", "I", "J"]
+  # Bilan mensuel : largeurs des colonnes C et D inversées
+  larg_c, larg_d = (12, 40.0) if is_mensuel else (40.0, 12)
+  ws.column_dimensions["C"].width = larg_c
+  ws.column_dimensions["D"].width = larg_d
+  cols_12 = ["B", "E", "F", "G", "H", "I", "J"]
   for col_l in cols_12:
     ws.column_dimensions[col_l].width = 12
 
@@ -1972,7 +1976,7 @@ def show(supabase):
           st.markdown("---")
 
           excel_file_cm = generate_excel_synthesis_controle(
-              df_display_cm, f"Mois de {mois_selected_c} {annee_c}"
+              df_display_cm, f"Mois de {mois_selected_c} {annee_c}", is_mensuel=True
           )
           st.download_button(
               label=(
