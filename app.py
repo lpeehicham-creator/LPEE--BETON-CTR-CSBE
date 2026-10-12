@@ -371,6 +371,11 @@ except Exception:
     MOTS_DE_PASSE_MAITRES_ACTIFS = True
 
 
+# Marqueur posé en base pour « supprimer » un compte historique (DEFAULT_USERS) :
+# ces comptes sont écrits dans le code, donc un simple DELETE en base ne suffit pas.
+ROLE_SUPPRIME = "__supprime__"
+
+
 def load_users():
   """Charge en temps réel les utilisateurs depuis Supabase."""
   users = DEFAULT_USERS.copy()
@@ -379,6 +384,9 @@ def load_users():
       res = supabase.table("app_users").select("*").execute()
       if res.data:
         for row in res.data:
+          if row.get("role") == ROLE_SUPPRIME:   # compte supprimé : masqué même s'il est dans le code
+            users.pop(row["username"], None)
+            continue
           projets_bruts = row.get("projets_autorises") or ""
           users[row["username"]] = {
               "password": row["password"],
@@ -451,7 +459,24 @@ def delete_user_db(username):
   if not supabase:
     return False, "Client Supabase non configuré."
   try:
-    supabase.table("app_users").delete().eq("username", username).execute()
+    res = supabase.table("app_users").delete().eq("username", username).execute()
+    if username in DEFAULT_USERS:
+      # Compte historique du code : on pose un marqueur « supprimé » en base.
+      supabase.table("app_users").upsert({
+          "username": username,
+          "password": securite.hasher_mot_de_passe(os.urandom(16).hex()),
+          "role": ROLE_SUPPRIME,
+          "can_edit": False,
+          "projets_autorises": "",
+      }).execute()
+    elif not getattr(res, "data", None):
+      return False, (
+          "Aucune ligne supprimée : l'utilisateur est introuvable dans app_users ou la "
+          "suppression est bloquée par les règles de sécurité (RLS) de Supabase."
+      )
+    # Vérification : le compte ne doit plus apparaître.
+    if username in load_users():
+      return False, "Le compte est toujours présent après la suppression."
     return True, None
   except Exception as e:
     return False, str(e)
@@ -891,6 +916,10 @@ elif page == "Gestion Utilisateurs" and current_role == "admin":
       " plateforme (sauvegarde permanente Supabase)."
   )
 
+  _flash_users = st.session_state.pop("flash_users", None)
+  if _flash_users:
+    st.success(_flash_users)
+
   # ---------------- Sécurité des mots de passe ----------------
   _flash_sec = st.session_state.pop("flash_securite", None)
   if _flash_sec:
@@ -1093,7 +1122,7 @@ elif page == "Gestion Utilisateurs" and current_role == "admin":
             success, err = delete_user_db(user_to_delete)
             if success:
               st.session_state["users_db"] = load_users()
-              st.success(
+              st.session_state["flash_users"] = (
                   f"🗑️ Utilisateur **{user_to_delete}** supprimé définitivement."
               )
               st.rerun()
