@@ -258,6 +258,7 @@ def _generer(client, types, errors, modeles, image_part, invite):
 
     dernier_refus = None
     quota_atteint = False
+    surcharge_google = False
     for modele in modeles:
         for variante in variantes:
             serveur = 0
@@ -299,10 +300,12 @@ def _generer(client, types, errors, modeles, image_part, invite):
                         break
                     if isinstance(code, int) and code >= 500:
                         serveur += 1
-                        if serveur <= 2:     # surcharge temporaire : on réessaie
-                            sleep(1.5 * serveur)
+                        if serveur <= 3:     # surcharge temporaire : attente croissante (2, 4, 8 s)
+                            sleep(2 ** serveur)
                             continue
-                        raise ScanBLError("Le service Google est surchargé. Réessayez dans un instant.")
+                        surcharge_google = True   # modèle saturé : on essaie le modèle suivant
+                        dernier_refus = e
+                        break
                     dernier_refus = e        # 400 : paramètre non accepté, variante plus simple
                     break
                 except (TypeError, ValueError) as e:  # réglage non reconnu par cette version du SDK
@@ -310,8 +313,16 @@ def _generer(client, types, errors, modeles, image_part, invite):
                     break
                 except Exception as e:
                     raise _erreur_inattendue(e)
-            if dernier_refus is not None and getattr(dernier_refus, "code", None) in (404, 429):
+            if dernier_refus is not None and getattr(dernier_refus, "code", None) in (404, 429) or (
+                surcharge_google and isinstance(getattr(dernier_refus, "code", None), int)
+                and dernier_refus.code >= 500
+            ):
                 break                        # inutile d'essayer les autres variantes de ce modèle
+    if surcharge_google and not quota_atteint:
+        raise ScanBLError(
+            "Les serveurs Google sont saturés en ce moment (modèles essayés sans succès). "
+            "Réessayez dans 1 à 2 minutes, ou décochez « lecture renforcée »."
+        )
     if quota_atteint:
         raise ScanBLError(
             "Quota Gemini atteint sur tous les modèles essayés (limite du palier gratuit ou crédit "
