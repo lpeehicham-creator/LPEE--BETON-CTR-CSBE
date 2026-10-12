@@ -999,6 +999,7 @@ def afficher_module_validation_admin(supabase, est_admin=False, peut_valider=Fal
                 "Force (kN)": f_kn,
                 "Résistance (MPa)": fc,
                 "Opérateur": ep.get("technicien", "-"),
+                "Saisi par": ep.get("saisi_par") or "-",
                 "_section": sec,
                 "_force_orig": f_kn,
                 "_fc_orig": fc,
@@ -1047,6 +1048,7 @@ def afficher_module_validation_admin(supabase, est_admin=False, peut_valider=Fal
             ),
             "Résistance (MPa)": st.column_config.NumberColumn("Résistance (MPa)", disabled=True, format="%.1f"),
             "Opérateur": st.column_config.TextColumn("Opérateur", disabled=True),
+            "Saisi par": st.column_config.TextColumn("👤 Saisi par", disabled=True),
         },
         use_container_width=True, hide_index=True, key=editor_key, on_change=_maj_resistance_admin,
     )
@@ -1086,6 +1088,7 @@ def afficher_module_validation_admin(supabase, est_admin=False, peut_valider=Fal
                 "Force (kN)": f_kn,
                 "Résistance (MPa)": fc,
                 "Statut PV": ep.get("statut_pv") or "⏳ En attente de validation",
+                "Saisi par": ep.get("saisi_par") or "-",
             })
         df_prec = pd.DataFrame(rows_prec)
         st.dataframe(df_prec, use_container_width=True, hide_index=True)
@@ -1200,7 +1203,93 @@ def afficher_module_validation_admin(supabase, est_admin=False, peut_valider=Fal
 # =========================================================
 # 3. APPLICATION PRINCIPALE STREAMLIT
 # =========================================================
+# ---------------------------------------------------------------------------
+# Traçabilité : le nom d'utilisateur de la session est inscrit automatiquement
+# dans chaque enregistrement créé ou modifié de `suivi_controle_beton`.
+#   - saisi_par  : dernière personne ayant saisi / modifié la ligne
+#   - valide_par : personne ayant pris la décision (validation / rejet du PV)
+# Les colonnes doivent exister en base (voir ajout_colonnes_tracabilite.sql) ;
+# sinon la traçabilité est simplement désactivée, sans erreur.
+# ---------------------------------------------------------------------------
+TABLE_TRACEE = "suivi_controle_beton"
+
+
+def _nom_utilisateur_session():
+    user = st.session_state.get("user") or {}
+    return str(st.session_state.get("username") or user.get("username") or "").strip()
+
+
+def _colonnes_trace_disponibles(supabase):
+    cache = st.session_state.get("_trace_cols")
+    if cache is not None:
+        return cache
+    cols = set()
+    for col in ("saisi_par", "valide_par"):
+        try:
+            supabase.table(TABLE_TRACEE).select(col).limit(1).execute()
+            cols.add(col)
+        except Exception:
+            pass
+    st.session_state["_trace_cols"] = cols
+    return cols
+
+
+class _TableTracee:
+    def __init__(self, table, utilisateur, colonnes):
+        self._table, self._user, self._cols = table, utilisateur, colonnes
+
+    def _marquer(self, payload):
+        if isinstance(payload, list):
+            return [self._marquer(p) for p in payload]
+        if not isinstance(payload, dict):
+            return payload
+        p = dict(payload)
+        if "saisi_par" in self._cols:
+            p["saisi_par"] = self._user
+        if "valide_par" in self._cols and "statut_pv" in p:
+            p["valide_par"] = self._user
+        return p
+
+    def insert(self, payload, *a, **k):
+        return self._table.insert(self._marquer(payload), *a, **k)
+
+    def update(self, payload, *a, **k):
+        return self._table.update(self._marquer(payload), *a, **k)
+
+    def upsert(self, payload, *a, **k):
+        return self._table.upsert(self._marquer(payload), *a, **k)
+
+    def __getattr__(self, nom):
+        return getattr(self._table, nom)
+
+
+class _SupabaseTrace:
+    def __init__(self, client, utilisateur, colonnes):
+        self._client, self._user, self._cols = client, utilisateur, colonnes
+
+    def table(self, nom):
+        t = self._client.table(nom)
+        if nom == TABLE_TRACEE:
+            return _TableTracee(t, self._user, self._cols)
+        return t
+
+    def __getattr__(self, nom):
+        return getattr(self._client, nom)
+
+
+def avec_tracabilite(supabase):
+    """Renvoie un client Supabase qui marque automatiquement les écritures."""
+    if isinstance(supabase, _SupabaseTrace):
+        return supabase
+    utilisateur = _nom_utilisateur_session()
+    if not utilisateur:
+        return supabase
+    cols = _colonnes_trace_disponibles(supabase)
+    return _SupabaseTrace(supabase, utilisateur, cols) if cols else supabase
+
+
 def show(supabase):
+    supabase = avec_tracabilite(supabase)
     st.title("🧪 Contrôle & Écrasement du Béton (NF EN 12390)")
 
     st.session_state.setdefault("phase_actuelle", OPTIONS_ONGLETS[0])
@@ -2342,6 +2431,7 @@ def show(supabase):
                             "ID": ep["id"], "🏷️ Référence de Contrôle": str(ep.get("ref_controle") or ref_controle_courante).strip(),
                             "Repère": ep.get("repere_eprouvette", f"/{ep['id']}"), "Forme d'éprouvette": forme_ep,
                             "_section": sec, "Force (kN)": f_kn, "Résistance Fc (MPa)": fc, "Moyenne Resistance Fc (MPa)": 0.0,
+                            "Saisi par": ep.get("saisi_par") or "-",
                             "_force_orig": f_kn, "_ref_orig": str(ep.get("ref_controle") or ref_controle_courante).strip(),
                             "_repere_orig": ep.get("repere_eprouvette", f"/{ep['id']}"),
                             "_type_essai": type_essai_ep, "_forme": forme_ep,
@@ -2390,6 +2480,7 @@ def show(supabase):
                         "Force (kN)": st.column_config.NumberColumn("⚡ Force (kN)", min_value=0.0, max_value=3000.0, step=0.1, format="%.1f"),
                         "Résistance Fc (MPa)": st.column_config.NumberColumn("💥 Résistance Fc (MPa)", disabled=True, format="%.1f"),
                         "Moyenne Resistance Fc (MPa)": st.column_config.NumberColumn("📊 Moyenne Resistance Fc (MPa)", disabled=True, format="%.1f"),
+                        "Saisi par": st.column_config.TextColumn("👤 Saisi par", disabled=True),
                     },
                     use_container_width=True, hide_index=True, key="data_editor_ecrasement", on_change=update_fc,
                 )
