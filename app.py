@@ -879,7 +879,7 @@ def render_view(module, supabase_client):
 # ==========================================
 if page == "Accueil":
   _nom_proj = projets_config.nom_projet(projets_config.projet_actif(st.session_state["user"]))
-  st.title(f"🚚💧🌡️ Accueil - {_nom_proj}🔨🗜️🔬")
+  st.title(f"🚚💧 Accueil - {_nom_proj}🏗️🚚")
   st.markdown("### Plateforme de Suivi et Contrôle Qualité - LPEE")
 
   st.markdown("---")
@@ -1185,6 +1185,7 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
             {
                 "N° de dossier": _reg[p].get("num_dossier") or "-",
                 "Réf. N° PV": _reg[p].get("ref_pv") or "-",
+                "Laboratoire (PV)": _reg[p].get("type_labo") or projets_config.TYPE_LABO_DEFAUT,
                 "Chantier": _reg[p]["nom"],
                 "Client": _reg[p]["client"],
                 "Identifiant": p,
@@ -1212,6 +1213,12 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
         "Réf. N° du PV (préfixe)",
         placeholder="ex : 25/260/LGV/ B/",
         help="Préfixe affiché dans la case « RE N° » des PV de ce chantier, devant la référence de contrôle.",
+    )
+    type_labo_ch = st.selectbox(
+        "Type de laboratoire (affiché sur les PV de béton)",
+        projets_config.TYPES_LABO,
+        index=0,
+        help="Intitulé « Laboratoire de Contrôle … » imprimé dans l'en-tête des PV de ce chantier.",
     )
     intitule_ch = st.text_area(
         "Intitulé du chantier (facultatif)",
@@ -1242,7 +1249,7 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
       else:
         ok, resultat = projets_config.creer_projet(
             supabase, nom_ch, client_ch, current_username, dossier_ch, intitule_ch,
-            signataires_ch, ref_pv=ref_pv_ch
+            signataires_ch, ref_pv=ref_pv_ch, type_labo=type_labo_ch
         )
         if not ok:
           st.error(f"❌ {resultat}")
@@ -1287,6 +1294,13 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
           "Réf. N° du PV (préfixe)", value=info_mod.get("ref_pv") or "",
           placeholder="ex : 25/260/LGV/ B/",
       )
+      _tl_actuel = info_mod.get("type_labo") or projets_config.TYPE_LABO_DEFAUT
+      type_labo_m = st.selectbox(
+          "Type de laboratoire (affiché sur les PV de béton)",
+          projets_config.TYPES_LABO,
+          index=(projets_config.TYPES_LABO.index(_tl_actuel)
+                 if _tl_actuel in projets_config.TYPES_LABO else 0),
+      )
       intitule_m = st.text_area(
           "Intitulé du chantier (affiché sur les PV)",
           value=info_mod.get("intitule") or "",
@@ -1313,7 +1327,7 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
       if submit_m:
         ok_m, msg_m = projets_config.modifier_projet(
             supabase, pid_mod, nom_m, client_m, dossier_m, intitule_m, signataires_m,
-            ref_pv=ref_pv_m,
+            ref_pv=ref_pv_m, type_labo=type_labo_m,
         )
         if ok_m:
           try:
@@ -1327,12 +1341,14 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
                     "nom": info_mod["nom"], "client": info_mod["client"],
                     "num_dossier": info_mod.get("num_dossier") or "",
                     "ref_pv": info_mod.get("ref_pv") or "",
+                    "type_labo": info_mod.get("type_labo") or projets_config.TYPE_LABO_DEFAUT,
                     "signataires": info_mod.get("signataires") or [],
                 },
                 nouvelles_valeurs={
                     "nom": nom_m.strip(), "client": client_m.strip(),
                     "num_dossier": dossier_m.strip(),
                     "ref_pv": ref_pv_m.strip(),
+                    "type_labo": type_labo_m,
                     "signataires": projets_config.nettoyer_signataires(signataires_m),
                 },
             )
