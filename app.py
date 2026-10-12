@@ -1484,23 +1484,6 @@ elif page == "Mon équipe" and current_role == "responsable_chantier":
         else:
           st.error(f"❌ {msg}")
 
-    with st.expander("🔗 Redonner l'accès à un compte existant sans chantier"):
-      st.caption(
-          "Pour une personne déjà inscrite mais qui n'a plus accès à aucun chantier."
-          " Si elle travaille déjà sur un autre chantier, demandez à un administrateur."
-      )
-      with st.form(f"form_rattacher_{pid_eq}", clear_on_submit=True):
-        nom_ex = st.text_input("Nom d'utilisateur du compte existant")
-        go_att = st.form_submit_button("Donner accès à ce chantier")
-        if go_att:
-          ok, msg = projets_config.rattacher_compte(supabase, nom_ex, pid_eq)
-          if ok:
-            st.session_state["users_db"] = load_users()
-            st.session_state["flash_equipe"] = f"✅ {msg}"
-            st.rerun()
-          else:
-            st.error(f"❌ {msg}")
-
     # ---------------- Modifier / retirer ----------------
     _gerables_m = [m for m in membres if m["gerable"]]
     if _gerables_m:
