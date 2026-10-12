@@ -559,6 +559,8 @@ def attribuer_acces(supabase, username, projet_id):
 ROLES_EQUIPE = {
     "laboratoire": "Technicien laboratoire (essais + bétonnage)",
     "coordinateur_essais": "Coordinateur des essais (mêmes accès qu'un technicien laboratoire)",
+    "responsable_dossier": "Responsable de dossier (mêmes accès qu'un technicien laboratoire)",
+    "ingenieur_dossier": "L'ingénieur chargé de dossier (mêmes accès qu'un technicien laboratoire)",
     "restricted_betonnage": "Opérateur bétonnage (saisie du suivi de bétonnage)",
     "user": "Consultation (lecture seule)",
 }
