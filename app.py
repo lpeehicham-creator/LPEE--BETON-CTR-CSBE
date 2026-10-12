@@ -975,10 +975,12 @@ elif page == "Gestion Utilisateurs" and current_role == "admin":
         new_projets_labels = st.multiselect(
             "📁 Projets autorisés",
             options=[PROJETS_LABELS[p] for p in PROJETS_LIST],
-            default=[PROJETS_LABELS[projets_config.PROJET_PAR_DEFAUT]],
-            help="L'utilisateur ne pourra voir/saisir des données que pour"
-                 " le(s) projet(s) coché(s) ici (sans effet pour un rôle admin,"
-                 " qui voit toujours tous les projets).",
+            default=[],
+            help="Optionnel. L'utilisateur ne pourra voir/saisir des données que"
+                 " pour le(s) projet(s) coché(s) ici (sans effet pour un rôle"
+                 " admin, qui voit toujours tous les projets). Si aucun projet"
+                 " n'est choisi, un responsable de chantier pourra créer ses"
+                 " propres chantiers depuis la page « Chantiers ».",
         )
         new_projets = [
             p for p in PROJETS_LIST if PROJETS_LABELS[p] in new_projets_labels
@@ -994,8 +996,6 @@ elif page == "Gestion Utilisateurs" and current_role == "admin":
             st.error("❌ " + securite.valider_mot_de_passe(new_password, new_username))
           elif new_username in st.session_state["users_db"]:
             st.warning(f"⚠️ L'utilisateur **{new_username}** existe déjà.")
-          elif not new_projets and new_role != "admin":
-            st.error("❌ Sélectionnez au moins un projet autorisé.")
           else:
             success, err = save_user_db(
                 new_username, new_password, new_role, new_can_edit, new_projets
@@ -1070,8 +1070,6 @@ elif page == "Gestion Utilisateurs" and current_role == "admin":
               st.error(
                   f"❌ Le nom d'utilisateur **{mod_username}** existe déjà."
               )
-            elif not mod_projets and mod_role != "admin":
-              st.error("❌ Sélectionnez au moins un projet autorisé.")
             elif mod_password != "" and securite.valider_mot_de_passe(mod_password, mod_username):
               st.error("❌ " + securite.valider_mot_de_passe(mod_password, mod_username))
             else:
