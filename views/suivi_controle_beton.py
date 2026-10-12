@@ -560,6 +560,9 @@ def generer_pv_excel(export_data, infos_header):
     for cle_lot, data_lot in groupes_lots.items():
         lignes = sorted(data_lot["lignes"])
         est_28j = extraire_nb_jours(data_lot["age"]) >= 28
+        # Seule une série d'âge 28 jours encore en cours retarde le commentaire
+        # (une série à 90 jours en cours ne doit pas masquer les résultats à 28 jours).
+        est_exactement_28j = extraire_nb_jours(data_lot["age"]) == 28
         for i in range(0, len(lignes), TAILLE_SERIE):
             serie = lignes[i:i + TAILLE_SERIE]
             start_r, end_r = serie[0], serie[-1]
@@ -569,7 +572,7 @@ def generer_pv_excel(export_data, infos_header):
             if serie_en_cours:
                 if start_r != end_r: ws.merge_cells(f"H{start_r}:H{end_r}")
                 cell_h.value = "En cours"
-                if est_28j: moyenne_28j_en_cours = True
+                if est_exactement_28j: moyenne_28j_en_cours = True
             else:
                 if start_r == end_r:
                     cell_h.value = f"=ROUND(F{start_r}, 1)"
