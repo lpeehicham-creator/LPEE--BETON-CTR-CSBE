@@ -420,7 +420,10 @@ def generer_pv_excel(export_data, infos_header):
 
     if int(age) >= 28 and not gdata["fend"]:
       a_des_28j = True
-      if gdata["en_cours"]:
+      # Seule la série d'âge 28 jours en cours justifie le message « seront
+      # communiquées ultérieurement » : une série à 90 jours encore en cours
+      # ne doit pas masquer des résultats à 28 jours déjà saisis.
+      if gdata["en_cours"] and int(age) == 28:
         est_en_cours_28j = True
 
   seuil = next(
@@ -836,7 +839,10 @@ def generer_pv_pdf(export_data, infos_header):
 
     if int(age) >= 28 and not gdata["fend"]:
       a_des_28j = True
-      if gdata["en_cours"]:
+      # Seule la série d'âge 28 jours en cours justifie le message « seront
+      # communiquées ultérieurement » : une série à 90 jours encore en cours
+      # ne doit pas masquer des résultats à 28 jours déjà saisis.
+      if gdata["en_cours"] and int(age) == 28:
         est_en_cours_28j = True
 
   seuil = next(
