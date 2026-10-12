@@ -129,9 +129,13 @@ def show(supabase):
     can_edit = st.session_state.get("can_edit", False) or (user_info.get("can_edit", False))
     is_admin = (role == "admin")
     is_baallal_admin = str(username).strip().upper() == "BAALLAL" and is_admin
-    # Un responsable de chantier peut supprimer les suivis de bétonnage de son
-    # chantier actif (la suppression est limitée à ce projet).
-    is_resp_chantier = (role == "responsable_chantier")
+    # Ces rôles peuvent supprimer les suivis de bétonnage de leur chantier actif
+    # (la suppression est limitée à ce projet).
+    ROLES_SUPPRESSION_BETONNAGE = (
+        "responsable_chantier", "responsable_dossier", "coordinateur_essais",
+        "ingenieur_dossier", "chef_laboratoire",
+    )
+    is_resp_chantier = (role in ROLES_SUPPRESSION_BETONNAGE)
     can_modifier = is_admin or can_edit
     can_supprimer = is_admin or is_resp_chantier
 
