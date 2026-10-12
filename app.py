@@ -883,8 +883,8 @@ if page == "Accueil":
   st.markdown("### Plateforme de Suivi et Contrôle Qualité - LPEE")
 
   st.markdown("---")
-  col1, col2, col3 = st.columns([1, 2, 1])
-  with col2:
+  # Image pleine largeur de la zone centrale (avant : colonne centrale à 50 %).
+  with st.container():
     image_path = os.path.join(os.path.dirname(__file__), "LPEE sur chantier .JPG")
     if not os.path.exists(image_path):
       image_path = os.path.join(os.path.dirname(__file__), "LPEE")
