@@ -592,7 +592,7 @@ def generer_pv_excel(export_data, infos_header):
     obs_defaut = infos_header.get("observations") or "PERFORMANCES MECANIQUES A 28 JOURS SONT CONFORMES"
 
     seuil_min = 35.0
-    for classe, seuil in [("C25/30", 25.0), ("C30/37", 30.0), ("C35/45", 35.0), ("C40/50", 40.0)]:
+    for classe, seuil in [("C20/25", 20.0), ("C25/30", 25.0), ("C30/37", 30.0), ("C35/45", 35.0), ("C40/50", 40.0)]:
         if classe in classe_beton_val:
             seuil_min = seuil
             break
