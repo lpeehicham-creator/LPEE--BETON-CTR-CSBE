@@ -188,9 +188,20 @@ def show(supabase):
         
         st.text_input("Durée de transport / attente (min)", value=f"{duree_minutes} min", disabled=True, key="saisie_duree")
         
+        _classes_base = list(scan_bl.CLASSES_BETON)
+        _classes_saisie = list(_classes_base)
+        if "C20/25" not in _classes_saisie:
+            # Insertion avant la première classe plus résistante (ordre croissant).
+            _pos = next(
+                (i for i, c in enumerate(_classes_saisie)
+                 if str(c).upper().startswith("C") and str(c)[1:3].isdigit() and int(str(c)[1:3]) > 20),
+                len(_classes_saisie),
+            )
+            _classes_saisie.insert(_pos, "C20/25")
         classe_beton = st.selectbox(
             "Classe", 
-            scan_bl.CLASSES_BETON,
+            _classes_saisie,
+            index=_classes_saisie.index(_classes_base[0]) if _classes_base else 0,
             key="saisie_classe"
         )
         
@@ -427,8 +438,8 @@ def show(supabase):
                                 new_heure_arrivee = st.time_input("Heure d'arrivée au chantier", value=def_h_arr, key=f"edit_h_arr_{rec_id}")
                             
                                 classes_list = ["C20/25", "C25/30", "C30/37", "C35/45", "C40/50", "C45/55"]
-                                current_classe = selected_item.get("classe_beton", "C20/25")
-                                idx_classe = classes_list.index(current_classe) if current_classe in classes_list else 0
+                                current_classe = selected_item.get("classe_beton", "C25/30")
+                                idx_classe = classes_list.index(current_classe) if current_classe in classes_list else classes_list.index("C25/30")
                                 new_classe = st.selectbox("Classe", classes_list, index=idx_classe, key=f"edit_classe_{rec_id}")
                             
                                 new_centrale = st.text_input("Centrale à Béton", value=selected_item.get("centrale_beton", "TG PREFA"), key=f"edit_centrale_{rec_id}")
