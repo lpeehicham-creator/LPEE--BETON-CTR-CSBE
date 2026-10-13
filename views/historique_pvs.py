@@ -436,7 +436,7 @@ def generer_pv_excel(export_data, infos_header):
   elif moyenne_28j_val >= seuil:
     comment_valeur = "PERFORMANCES MECANIQUES A 28 JOURS SONT CONFORMES"
   else:
-    comment_valeur = "PERFORMANCES MECANIQUES NON CONFORMES"
+    comment_valeur = "PERFORMANCES MECANIQUES NE SONT PAS NON CONFORMES"
 
   row_comment = ligne_courante
   set_cell(row_comment, 1, "Commentaire :", bold=True, fill=LABEL_FILL, align="left")
@@ -867,7 +867,7 @@ def generer_pv_pdf(export_data, infos_header):
   elif moyenne_28j_val >= seuil:
     comment_valeur = "PERFORMANCES MECANIQUES A 28 JOURS SONT CONFORMES"
   else:
-    comment_valeur = "PERFORMANCES MECANIQUES NON CONFORMES"
+    comment_valeur = "PERFORMANCES MECANIQUES NE SONT PAS NON CONFORMES"
 
   r = blank_row()
   r[0] = "Commentaire :"
