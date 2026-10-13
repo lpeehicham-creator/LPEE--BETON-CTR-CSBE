@@ -427,7 +427,7 @@ def generer_pv_excel(export_data, infos_header):
         est_en_cours_28j = True
 
   seuil = next(
-      (s for k, s in [("C25/30", 25.0), ("C30/37", 30.0), ("C35/45", 35.0), ("C40/50", 40.0)]
+      (s for k, s in [("C20/25", 20.0), ("C25/30", 25.0), ("C30/37", 30.0), ("C35/45", 35.0), ("C40/50", 40.0)]
        if k in str(clean_na(infos_header.get("classe_beton"), "C35/45")).upper()),
       35.0,
   )
@@ -849,6 +849,7 @@ def generer_pv_pdf(export_data, infos_header):
       (
           s
           for k, s in [
+              ("C20/25", 20.0),
               ("C25/30", 25.0),
               ("C30/37", 30.0),
               ("C35/45", 35.0),
