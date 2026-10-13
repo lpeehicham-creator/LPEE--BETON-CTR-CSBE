@@ -9,6 +9,7 @@ import streamlit.components.v1 as components
 import extra_streamlit_components as stx
 from supabase import Client, create_client
 import projets_config
+import effets_ia
 import securite
 
 # Importation sécurisée du gestionnaire Hors-Ligne SQLite
@@ -545,6 +546,7 @@ if st.session_state["user"] is None:
 # 4. ÉCRAN DE CONNEXION
 # ==========================================
 if st.session_state["user"] is None:
+  effets_ia.appliquer("connexion")
   col1, col2, col3 = st.columns([1, 2, 1])
   with col2:
     st.markdown("<br><br>", unsafe_allow_html=True)
@@ -555,6 +557,7 @@ if st.session_state["user"] is None:
       except Exception as e:
         st.error(f"Erreur lors de la lecture de l'image : {e}")
     st.title("🔐 Accès Restreint - LPEE")
+    effets_ia.pastille_statut("Connexion sécurisée")
     st.caption("Veuillez saisir vos identifiants pour accéder à la plateforme.")
 
     if st.session_state.get("pending_qr_rec") or st.session_state.get("pending_qr_bid"):
@@ -884,8 +887,10 @@ def render_view(module, supabase_client):
 # 6. ROUTAGE DES VUES
 # ==========================================
 if page == "Accueil":
+  effets_ia.appliquer("accueil")
   _nom_proj = projets_config.nom_projet(projets_config.projet_actif(st.session_state["user"]))
   st.title(f"🚚💧🌡️ Accueil - {_nom_proj}🔨🗜️🔬")
+  effets_ia.pastille_statut("Plateforme en ligne")
   st.markdown("### Plateforme de Suivi et Contrôle Qualité - LPEE")
 
   st.markdown("---")
