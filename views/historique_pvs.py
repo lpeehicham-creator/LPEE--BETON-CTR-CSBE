@@ -1500,7 +1500,7 @@ def show(supabase):
             "OUI": "OUI — performances conformes",
             "NON": "NON — performances non conformes",
         }
-        if is_admin or role_norm == "responsable_dossier":
+        if peut_telecharger:  # mêmes personnes que celles qui téléchargent le PV
           st.markdown("##### ✅ Commentaire du PV : performances mécaniques à 28 jours")
           _cc1, _cc2 = st.columns([3, 1])
           _choix_conf = _cc1.selectbox(
@@ -1548,12 +1548,12 @@ def show(supabase):
           if _conf_actuelle:
             st.caption(
                 "Commentaire du PV (performances à 28 jours) : "
-                f"{_libelles_conf[_conf_actuelle]} — choix du responsable de dossier."
+                f"{_libelles_conf[_conf_actuelle]}"
             )
           else:
             st.caption(
                 "Commentaire du PV (performances à 28 jours) : automatique, selon les "
-                "résultats. Le responsable de dossier peut le fixer sur OUI ou NON."
+                "résultats."
             )
 
         nom_rec_clean = nettoyer_nom_fichier(ref_ctrl_h)
