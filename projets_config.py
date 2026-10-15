@@ -103,6 +103,7 @@ def charger_projets(supabase, force=False):
                     "num_dossier": row.get("num_dossier") or "",
                     "ref_pv": row.get("ref_pv") or "",
                     "num_reception_depart": row.get("num_reception_depart"),
+                    "logo_chantier": row.get("logo_chantier") or "",
                     "type_labo": row.get("type_labo") or "",
                     "intitule": row.get("intitule") or "",
                     "signataires": nettoyer_signataires(row.get("signataires")),
@@ -138,7 +139,7 @@ def _slug_projet(nom):
     return s[:40]
 
 
-def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", signataires=None, ref_pv="", type_labo="", num_reception_depart=None):
+def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", signataires=None, ref_pv="", type_labo="", num_reception_depart=None, logo=None):
     """Crée un chantier. Retourne (True, projet_id) ou (False, message).
     Réservé aux rôles admin / responsable_chantier (vérifié ici, pas
     seulement dans l'interface)."""
@@ -188,7 +189,11 @@ def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", s
         depart = _entier_positif(num_reception_depart)
         if depart:  # colonne facultative `num_reception_depart` (1er N° de réception)
             ligne["num_reception_depart"] = depart
+        if logo:  # colonne facultative `logo_chantier` (image PNG en base64)
+            ligne["logo_chantier"] = preparer_logo(logo)
         supabase.table("projets").insert(ligne).execute()
+    except ValueError as e:  # logo invalide
+        return False, str(e)
     except Exception as e:
         return False, _msg_erreur_projets(e)
     charger_projets(supabase, force=True)
@@ -300,6 +305,48 @@ def type_labo(projet_id=None):
     pid = projet_id or projet_actif(st.session_state.get("user") or {})
     valeur = ((get_projets().get(pid) or {}).get("type_labo") or "").strip()
     return valeur if valeur in TYPES_LABO else TYPE_LABO_DEFAUT
+
+
+def preparer_logo(donnees):
+    """Image envoyée (PNG/JPG, 2 Mo max) -> PNG réduit (400x200 max) en base64.
+    Lève ValueError avec un message lisible si le fichier est invalide."""
+    import base64
+    import io
+
+    if not donnees:
+        return None
+    if len(donnees) > 2 * 1024 * 1024:
+        raise ValueError("Logo trop volumineux (2 Mo maximum).")
+    try:
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(donnees))
+        img.load()
+    except Exception:
+        raise ValueError("Fichier image invalide (PNG ou JPG attendu).")
+    if img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGBA")
+    img.thumbnail((400, 200))
+    sortie = io.BytesIO()
+    img.save(sortie, "PNG", optimize=True)
+    return base64.b64encode(sortie.getvalue()).decode("ascii")
+
+
+def logo_chantier_b64(projet_id=None):
+    """Logo du chantier (PNG en base64), ou "" s'il n'y en a pas."""
+    pid = projet_id or projet_actif(st.session_state.get("user") or {})
+    return (get_projets().get(pid) or {}).get("logo_chantier") or ""
+
+
+def logo_chantier_bytes(projet_id=None):
+    """Logo du chantier décodé (octets PNG), ou None."""
+    import base64
+
+    b64 = logo_chantier_b64(projet_id)
+    try:
+        return base64.b64decode(b64) if b64 else None
+    except Exception:
+        return None
 
 
 def _entier_positif(valeur):
@@ -468,7 +515,7 @@ def peut_supprimer_projet(user_info, projet_id):
 
 def _msg_erreur_projets(e):
     txt = str(e)
-    if "signataires" in txt or "intitule" in txt or "num_dossier" in txt or "ref_pv" in txt or "type_labo" in txt or "num_reception_depart" in txt:
+    if "signataires" in txt or "intitule" in txt or "num_dossier" in txt or "ref_pv" in txt or "type_labo" in txt or "num_reception_depart" in txt or "logo_chantier" in txt:
         return ("Colonne manquante dans la table `projets` : exécutez le script "
                 f"ajout_table_projets.sql dans Supabase. ({txt})")
     return f"Erreur Supabase : {txt}"
@@ -479,7 +526,7 @@ def _projet_en_base(supabase, projet_id):
     return bool(res.data)
 
 
-def modifier_projet(supabase, projet_id, nom, client, num_dossier, intitule="", signataires=None, ref_pv=None, type_labo=None, num_reception_depart=None):
+def modifier_projet(supabase, projet_id, nom, client, num_dossier, intitule="", signataires=None, ref_pv=None, type_labo=None, num_reception_depart=None, logo=None, supprimer_logo=False):
     """Modifie nom, client et N° de dossier. L'identifiant ne change jamais
     (les données y sont rattachées). Retourne (ok, message)."""
     user = st.session_state.get("user") or {}
@@ -520,7 +567,13 @@ def modifier_projet(supabase, projet_id, nom, client, num_dossier, intitule="", 
             actuel_depart = _entier_positif((get_projets().get(projet_id) or {}).get("num_reception_depart"))
             if nouveau_depart != actuel_depart:
                 valeurs["num_reception_depart"] = nouveau_depart
+        if supprimer_logo:
+            valeurs["logo_chantier"] = None
+        elif logo:
+            valeurs["logo_chantier"] = preparer_logo(logo)
         supabase.table("projets").update(valeurs).eq("id", projet_id).execute()
+    except ValueError as e:  # logo invalide
+        return False, str(e)
     except Exception as e:
         return False, _msg_erreur_projets(e)
     charger_projets(supabase, force=True)
