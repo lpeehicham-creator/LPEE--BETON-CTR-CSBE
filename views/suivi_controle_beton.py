@@ -1378,7 +1378,7 @@ def show(supabase):
     # =========================================================
     if onglet_courant == OPTIONS_ONGLETS[0]:
         st.subheader("📋 0. Réception & Validation des Bétons")
-        st.info("💡 **Condition requise** : Saisissez manuellement le **N° Réception**. Une fois enregistré, le numéro débloquera la Phase 1 et permettra la génération d'étiquettes **QR Code** étanches.")
+        st.info("💡 Le **N° Réception** est attribué automatiquement à chaque bétonnage avec prélèvement (suite numérique à partir du N° de démarrage défini dans le chantier). Vous pouvez le corriger ou le saisir ici pour les anciennes fiches. Une fois renseigné, il débloque la Phase 1 et permet la génération d'étiquettes **QR Code** étanches.")
 
         if not betonnages_preleves:
             st.info("ℹ️ Aucun bétonnage prélevé dans la base de données.")
