@@ -102,6 +102,7 @@ def charger_projets(supabase, force=False):
                     "client": row.get("client") or "-",
                     "num_dossier": row.get("num_dossier") or "",
                     "ref_pv": row.get("ref_pv") or "",
+                    "num_reception_depart": row.get("num_reception_depart"),
                     "type_labo": row.get("type_labo") or "",
                     "intitule": row.get("intitule") or "",
                     "signataires": nettoyer_signataires(row.get("signataires")),
@@ -137,7 +138,7 @@ def _slug_projet(nom):
     return s[:40]
 
 
-def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", signataires=None, ref_pv="", type_labo=""):
+def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", signataires=None, ref_pv="", type_labo="", num_reception_depart=None):
     """Crée un chantier. Retourne (True, projet_id) ou (False, message).
     Réservé aux rôles admin / responsable_chantier (vérifié ici, pas
     seulement dans l'interface)."""
@@ -186,6 +187,9 @@ def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", s
             ligne["ref_pv"] = ref_pv
         if type_labo and type_labo != TYPE_LABO_DEFAUT:  # colonne facultative `type_labo`
             ligne["type_labo"] = type_labo
+        depart = _entier_positif(num_reception_depart)
+        if depart:  # colonne facultative `num_reception_depart` (1er N° de réception)
+            ligne["num_reception_depart"] = depart
         supabase.table("projets").insert(ligne).execute()
     except Exception as e:
         return False, _msg_erreur_projets(e)
@@ -298,6 +302,51 @@ def type_labo(projet_id=None):
     pid = projet_id or projet_actif(st.session_state.get("user") or {})
     valeur = ((get_projets().get(pid) or {}).get("type_labo") or "").strip()
     return valeur if valeur in TYPES_LABO else TYPE_LABO_DEFAUT
+
+
+def _entier_positif(valeur):
+    """Entier >= 1, ou None (vide, 0, texte invalide)."""
+    try:
+        n = int(float(str(valeur).strip().replace(",", ".")))
+    except (TypeError, ValueError):
+        return None
+    return n if n >= 1 else None
+
+
+def num_reception_depart(projet_id=None):
+    """N° de démarrage des réceptions défini pour le chantier (ou None)."""
+    pid = projet_id or projet_actif(st.session_state.get("user") or {})
+    return _entier_positif((get_projets().get(pid) or {}).get("num_reception_depart"))
+
+
+def prochain_num_reception(supabase, projet_id):
+    """Prochain N° de réception du chantier : le plus grand des deux entre le
+    N° de démarrage défini sur le chantier (1 par défaut) et le plus grand N°
+    purement numérique déjà utilisé dans suivi_betonnage + 1. Les anciennes
+    références non numériques (ex. « B/395 », « TEST05 ») sont ignorées.
+    Retourne un entier, ou None si la base est inaccessible."""
+    try:
+        plus_grand = 0
+        debut = 0
+        while True:  # pagination : Supabase renvoie 1000 lignes au maximum
+            res = (
+                supabase.table("suivi_betonnage")
+                .select("num_reception")
+                .eq("projet_id", projet_id)
+                .range(debut, debut + 999)
+                .execute()
+            )
+            lignes = res.data or []
+            for ligne in lignes:
+                val = str(ligne.get("num_reception") or "").strip()
+                if val.isdigit():
+                    plus_grand = max(plus_grand, int(val))
+            if len(lignes) < 1000:
+                break
+            debut += 1000
+        return max(num_reception_depart(projet_id) or 1, plus_grand + 1)
+    except Exception:
+        return None
 
 
 def ref_pv(defaut_lgv, projet_id=None):
@@ -421,7 +470,7 @@ def peut_supprimer_projet(user_info, projet_id):
 
 def _msg_erreur_projets(e):
     txt = str(e)
-    if "signataires" in txt or "intitule" in txt or "num_dossier" in txt or "ref_pv" in txt or "type_labo" in txt:
+    if "signataires" in txt or "intitule" in txt or "num_dossier" in txt or "ref_pv" in txt or "type_labo" in txt or "num_reception_depart" in txt:
         return ("Colonne manquante dans la table `projets` : exécutez le script "
                 f"ajout_table_projets.sql dans Supabase. ({txt})")
     return f"Erreur Supabase : {txt}"
@@ -432,7 +481,7 @@ def _projet_en_base(supabase, projet_id):
     return bool(res.data)
 
 
-def modifier_projet(supabase, projet_id, nom, client, num_dossier, intitule="", signataires=None, ref_pv=None, type_labo=None):
+def modifier_projet(supabase, projet_id, nom, client, num_dossier, intitule="", signataires=None, ref_pv=None, type_labo=None, num_reception_depart=None):
     """Modifie nom, client et N° de dossier. L'identifiant ne change jamais
     (les données y sont rattachées). Retourne (ok, message)."""
     user = st.session_state.get("user") or {}
@@ -470,6 +519,11 @@ def modifier_projet(supabase, projet_id, nom, client, num_dossier, intitule="", 
             actuel = (get_projets().get(projet_id) or {}).get("type_labo") or ""
             if type_labo != (actuel or TYPE_LABO_DEFAUT):
                 valeurs["type_labo"] = None if type_labo == TYPE_LABO_DEFAUT else type_labo
+        if num_reception_depart is not None:  # None = inchangé ; 0 = aucun N° de départ
+            nouveau_depart = _entier_positif(num_reception_depart)
+            actuel_depart = _entier_positif((get_projets().get(projet_id) or {}).get("num_reception_depart"))
+            if nouveau_depart != actuel_depart:
+                valeurs["num_reception_depart"] = nouveau_depart
         supabase.table("projets").update(valeurs).eq("id", projet_id).execute()
     except Exception as e:
         return False, _msg_erreur_projets(e)
