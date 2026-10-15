@@ -1545,10 +1545,16 @@ def show(supabase):
                 else:
                   st.error(f"❌ Enregistrement impossible : {e_conf}")
         else:
-          st.caption(
-              "Commentaire du PV (performances à 28 jours) : "
-              f"{_libelles_conf[_conf_actuelle]} — choisi par le responsable de dossier."
-          )
+          if _conf_actuelle:
+            st.caption(
+                "Commentaire du PV (performances à 28 jours) : "
+                f"{_libelles_conf[_conf_actuelle]} — choix du responsable de dossier."
+            )
+          else:
+            st.caption(
+                "Commentaire du PV (performances à 28 jours) : automatique, selon les "
+                "résultats. Le responsable de dossier peut le fixer sur OUI ou NON."
+            )
 
         nom_rec_clean = nettoyer_nom_fichier(ref_ctrl_h)
         date_fab_clean = formater_date_nom_fichier(date_coulee_h)
