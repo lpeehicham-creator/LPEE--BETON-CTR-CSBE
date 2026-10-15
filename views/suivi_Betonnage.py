@@ -264,6 +264,14 @@ def show(supabase):
                     "technicien": technicien,
                     "projet_id": projet_id_actif,
                 }
+
+                # Prélèvement OUI : le N° de réception est attribué automatiquement
+                # (suite numérique du chantier, à partir de son N° de démarrage).
+                num_auto = None
+                if prelevement == "OUI":
+                    num_auto = projets_config.prochain_num_reception(supabase, projet_id_actif)
+                    if num_auto is not None:
+                        data["num_reception"] = str(num_auto)
                 
                 try:
                     res_ins = supabase.table("suivi_betonnage").insert(data).execute()
@@ -276,7 +284,10 @@ def show(supabase):
                             action="CREATION",
                             nouvelles_valeurs=data,
                         )
-                    st.success("Enregistrement réussi !")
+                    st.success(
+                        "Enregistrement réussi !"
+                        + (f" N° de réception attribué : **{num_auto}**" if num_auto is not None else "")
+                    )
                     st.rerun()
                 except Exception as e:
                     if "row-level security" in str(e).lower():
@@ -490,6 +501,15 @@ def show(supabase):
                                                 "nb_eprouvettes": 0 if new_prelevement == "NON" else int(new_nb_eprouvettes),
                                                 "observations": new_observations
                                             }
+                                            # Passage à OUI sans N° de réception : on l'attribue.
+                                            _num_actuel = str(
+                                                selected_item.get("num_reception")
+                                                or selected_item.get("n_reception") or ""
+                                            ).strip()
+                                            if new_prelevement == "OUI" and _num_actuel in ("", "-", "None"):
+                                                _num_auto = projets_config.prochain_num_reception(supabase, projet_id_actif)
+                                                if _num_auto is not None:
+                                                    nouvelles_valeurs_beton["num_reception"] = str(_num_auto)
                                             anciennes_valeurs_beton = {
                                                 k: selected_item.get(k) for k in nouvelles_valeurs_beton
                                             }
