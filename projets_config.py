@@ -604,8 +604,8 @@ def attribuer_acces(supabase, username, projet_id):
 # ==============================================================================
 # ÉQUIPE DU CHANTIER (comptes que le responsable de chantier peut gérer)
 # ==============================================================================
-# Rôles qu'un responsable de chantier peut attribuer. Les rôles `admin` et
-# `responsable_chantier` ne peuvent être donnés que par un administrateur.
+# Rôles qu'un responsable de chantier peut attribuer, modifier ou retirer. Le
+# rôle `admin` ne peut être donné que par un administrateur.
 ROLES_EQUIPE = {
     "laboratoire": "Technicien laboratoire (essais + bétonnage)",
     "coordinateur_essais": "Coordinateur des essais (mêmes accès qu'un technicien laboratoire)",
@@ -614,6 +614,17 @@ ROLES_EQUIPE = {
     "chef_laboratoire": "Chef du laboratoire (mêmes accès qu'un technicien laboratoire)",
     "restricted_betonnage": "Opérateur bétonnage (saisie du suivi de bétonnage)",
     "user": "Consultation (lecture seule)",
+}
+
+
+# Rôles proposés à l'AJOUT d'un membre : en plus de ROLES_EQUIPE, un responsable
+# de chantier peut ajouter un autre responsable de chantier (pour valider les PV
+# du même chantier). Ce collègue n'est ensuite modifiable / retirable que par un
+# administrateur (il n'est pas dans ROLES_EQUIPE), ce qui évite qu'un responsable
+# change le mot de passe ou supprime l'accès d'un collègue de même niveau.
+ROLES_EQUIPE_AJOUT = {
+    "responsable_chantier": "Responsable de chantier (valide les PV, gère le chantier)",
+    **ROLES_EQUIPE,
 }
 
 
@@ -705,7 +716,7 @@ def ajouter_membre(supabase, username, password, role, can_edit, projets, noms_r
     err_mdp = securite.valider_mot_de_passe(password, username)
     if err_mdp:
         return False, err_mdp
-    if role not in ROLES_EQUIPE:
+    if role not in ROLES_EQUIPE_AJOUT:
         return False, "Rôle non autorisé pour un responsable de chantier."
     if not projets:
         return False, "Sélectionnez au moins un chantier."
