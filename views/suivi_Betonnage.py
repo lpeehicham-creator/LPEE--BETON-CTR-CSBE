@@ -5,6 +5,110 @@ from audit_log import enregistrer_modification, afficher_historique_modification
 import projets_config
 import scan_bl
 
+# ==============================================================================
+# TRAÇABILITÉ : qui a modifié quoi (lecture du journal d'audit)
+# ==============================================================================
+_TABLE_JOURNAL = "journal_modifications_iso17025"
+
+_LIBELLES_CHAMPS = {
+    "date_livraison": "Date de livraison", "bl_num": "N° BL", "ouvrage": "Ouvrage",
+    "quantite_m3": "Quantité (m³)", "client": "Client", "classe_beton": "Classe de béton",
+    "centrale_beton": "Centrale", "meteo": "Météo", "heure_fin_coulage": "Heure fin coulage",
+    "heure_arrivee": "Heure d'arrivée", "temperature": "Température béton",
+    "temperature_ambiante": "Température ambiante", "affaissement": "Affaissement",
+    "prelevement": "Prélèvement", "nb_eprouvettes": "Nb d'éprouvettes",
+    "observations": "Observations", "technicien": "Technicien",
+    "num_reception": "N° de réception", "projet_id": "Chantier",
+}
+
+
+def _valeur_txt(v):
+    return "-" if v is None or str(v).strip() == "" else str(v)
+
+
+def _en_dict(brut):
+    """Valeurs du journal (dict ou texte JSON) -> dict, sinon {}."""
+    import json
+    if isinstance(brut, dict):
+        return brut
+    if isinstance(brut, str) and brut.strip().startswith("{"):
+        try:
+            d = json.loads(brut)
+            return d if isinstance(d, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _lignes_lisibles(ligne, bl_par_id):
+    """Une ligne du journal -> une ou plusieurs lignes d'affichage
+    (une par champ modifié)."""
+    quand = str(ligne.get("horodatage") or ligne.get("date_modification") or "-")[:19].replace("T", " ")
+    rec = str(ligne.get("enregistrement_id") or "")
+    base = {
+        "Date/Heure": quand,
+        "Fiche (BL)": bl_par_id.get(rec, f"ID {rec}" if rec else "-"),
+        "Modifié par": _valeur_txt(ligne.get("utilisateur")),
+        "Action": _valeur_txt(ligne.get("action")),
+    }
+    champ = ligne.get("champ_modifie")
+    if champ:  # journal « une ligne par champ »
+        return [{**base,
+                 "Champ": _LIBELLES_CHAMPS.get(champ, champ),
+                 "Ancienne valeur": _valeur_txt(ligne.get("ancienne_valeur")),
+                 "Nouvelle valeur": _valeur_txt(ligne.get("nouvelle_valeur"))}]
+    anciennes = _en_dict(ligne.get("anciennes_valeurs"))
+    nouvelles = _en_dict(ligne.get("nouvelles_valeurs"))
+    lignes = []
+    for k in nouvelles:
+        if k in anciennes and str(anciennes.get(k)) == str(nouvelles.get(k)):
+            continue  # champ inchangé
+        lignes.append({**base,
+                       "Champ": _LIBELLES_CHAMPS.get(k, k),
+                       "Ancienne valeur": _valeur_txt(anciennes.get(k)) if anciennes else "-",
+                       "Nouvelle valeur": _valeur_txt(nouvelles.get(k))})
+    if not lignes:  # création / suppression / aucun détail exploitable
+        lignes.append({**base, "Champ": "-", "Ancienne valeur": "-", "Nouvelle valeur": "-"})
+    return lignes
+
+
+def _lire_journal(supabase, ids, limite=500):
+    """Entrées du journal pour les fiches `ids` (par paquets), plus récentes d'abord."""
+    resultat = []
+    ids = [str(i) for i in ids]
+    for debut in range(0, len(ids), 100):
+        res = (
+            supabase.table(_TABLE_JOURNAL).select("*")
+            .eq("table_concernee", "suivi_betonnage")
+            .in_("enregistrement_id", ids[debut:debut + 100])
+            .order("horodatage", desc=True)
+            .limit(limite)
+            .execute()
+        )
+        resultat.extend(res.data or [])
+    resultat.sort(key=lambda l: str(l.get("horodatage") or ""), reverse=True)
+    return resultat[:limite]
+
+
+def afficher_tracabilite(supabase, enregistrements, rec_id=None):
+    """Tableau « qui a modifié quoi ». `rec_id` : une seule fiche ; sinon tout le
+    chantier (liste `enregistrements`)."""
+    titre = ("🕓 Traçabilité de ce contrôle (qui a modifié quoi)" if rec_id is not None
+             else "🕓 Traçabilité des modifications du chantier (qui a modifié quoi)")
+    with st.expander(titre, expanded=False):
+        try:
+            bl_par_id = {str(r["id"]): str(r.get("bl_num") or "-") for r in enregistrements}
+            ids = [rec_id] if rec_id is not None else list(bl_par_id.keys())
+            lignes = _lire_journal(supabase, ids)
+        except Exception as e:
+            st.warning(f"Traçabilité indisponible : {e}")
+            return
+        affichage = [l for ligne in lignes for l in _lignes_lisibles(ligne, bl_par_id)]
+        if not affichage:
+            st.caption("Aucune modification enregistrée.")
+            return
+        st.dataframe(pd.DataFrame(affichage), use_container_width=True, hide_index=True)
+
 
 def configurer_acces_terrain(supabase_client):
     """Ajoute le code attendu par la politique RLS de suivi_betonnage.
@@ -550,6 +654,9 @@ def show(supabase):
 
                 if is_baallal_admin:
                     afficher_historique_modifications(supabase, "suivi_betonnage", rec_id)
+                else:
+                    afficher_tracabilite(supabase, res.data, rec_id=rec_id)
+                afficher_tracabilite(supabase, res.data)
 
         else:
             st.info("Aucune donnée enregistrée pour le moment.")
