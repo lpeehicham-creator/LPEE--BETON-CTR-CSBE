@@ -156,8 +156,6 @@ def creer_projet(supabase, nom, client, createur, num_dossier="", intitule="", s
         return False, "Le nom du chantier doit contenir au moins 3 caractères."
     if not client:
         return False, "Le client est obligatoire."
-    if not num_dossier:
-        return False, "Le N° de dossier est obligatoire."
     if not signataires:
         return False, ("Indiquez au moins une personne qui signe les PV "
                        "(nom et fonction).")
@@ -493,8 +491,6 @@ def modifier_projet(supabase, projet_id, nom, client, num_dossier, intitule="", 
         return False, "Le nom du chantier doit contenir au moins 3 caractères."
     if not client:
         return False, "Le client est obligatoire."
-    if not num_dossier:
-        return False, "Le N° de dossier est obligatoire."
     if signataires is not None:
         signataires = nettoyer_signataires(signataires)
         if not signataires:
