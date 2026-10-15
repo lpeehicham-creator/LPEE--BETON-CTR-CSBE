@@ -1452,6 +1452,7 @@ elif page == "Mon équipe" and current_role == "responsable_chantier":
   _gerables = projets_config.projets_gerables(_user)
   _reserves = set(DEFAULT_USERS.keys()) | {"ADMIN", "USER"}
   _roles_eq = projets_config.ROLES_EQUIPE
+  _roles_ajout = projets_config.ROLES_EQUIPE_AJOUT
 
   if not _gerables:
     st.info("Aucun chantier à gérer. Créez d'abord un chantier dans la page « Chantiers ».")
@@ -1475,7 +1476,7 @@ elif page == "Mon équipe" and current_role == "responsable_chantier":
                   "Utilisateur": m["username"],
                   "Rôle": (
                       "Responsable de chantier" if m["role"] == "responsable_chantier"
-                      else _roles_eq.get(m["role"], m["role"])
+                      else _roles_ajout.get(m["role"], m["role"])
                   ),
                   "Droit de modification": "Oui" if m["can_edit"] else "Non",
                   "Autres chantiers": "Oui" if m["partage"] else "Non",
@@ -1493,7 +1494,7 @@ elif page == "Mon équipe" and current_role == "responsable_chantier":
     with st.form(f"form_ajout_membre_{pid_eq}", clear_on_submit=True):
       nm = st.text_input("Nom d'utilisateur", placeholder="ex : A.ALAMI")
       pw = st.text_input("Mot de passe (8 caractères minimum)", type="password")
-      rl = st.selectbox("Rôle", list(_roles_eq.keys()), format_func=lambda r: _roles_eq[r])
+      rl = st.selectbox("Rôle", list(_roles_ajout.keys()), format_func=lambda r: _roles_ajout[r])
       ce = st.checkbox(
           "Droit de modification", value=True,
           help="Permet de modifier / corriger les fiches et les essais déjà enregistrés.",
