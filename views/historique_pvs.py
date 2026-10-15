@@ -436,7 +436,7 @@ def generer_pv_excel(export_data, infos_header):
   elif moyenne_28j_val >= seuil:
     comment_valeur = "PERFORMANCES MECANIQUES A 28 JOURS SONT CONFORMES"
   else:
-    comment_valeur = "PERFORMANCES MECANIQUES NE SONT PAS CONFORMES"
+    comment_valeur = "PERFORMANCES MECANIQUES NON CONFORMES"
 
   row_comment = ligne_courante
   set_cell(row_comment, 1, "Commentaire :", bold=True, fill=LABEL_FILL, align="left")
@@ -487,6 +487,55 @@ def generer_pv_excel(export_data, infos_header):
           ext=XDRPositiveSize2D(pixels_to_EMU(w_px), pixels_to_EMU(h_px)),
       )
       ws.add_image(img)
+    except Exception:
+      pass  # le PV reste généré même si le logo pose problème
+
+  # Logo du chantier : à droite du bloc « Laboratoire de Contrôle … » (fin de la colonne D)
+  logo_ch_b64 = infos_header.get("logo_chantier") or ""
+  if logo_ch_b64:
+    try:
+      import base64
+      from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+      from openpyxl.drawing.xdr import XDRPositiveSize2D
+      from openpyxl.utils.units import pixels_to_EMU
+
+      ws.row_dimensions[2].height = 30
+      ws.row_dimensions[3].height = 30
+      haut_bloc_px = int((30 + 30) * 96 / 72)
+      larg_d_px = int(widths["D"] * 7 + 5)
+      img_ch = XLImage(io.BytesIO(base64.b64decode(logo_ch_b64)))
+      ratio_ch = img_ch.width / img_ch.height if img_ch.height else 1
+      h_ch = haut_bloc_px - 12
+      w_ch = int(h_ch * ratio_ch)
+      if w_ch > larg_d_px - 6:
+        w_ch = larg_d_px - 6
+        h_ch = int(w_ch / ratio_ch)
+      img_ch.anchor = OneCellAnchor(
+          _from=AnchorMarker(
+              col=3, row=1,
+              colOff=pixels_to_EMU(max(larg_d_px - w_ch - 3, 0)),
+              rowOff=pixels_to_EMU(max((haut_bloc_px - h_ch) // 2, 0)),
+          ),
+          ext=XDRPositiveSize2D(pixels_to_EMU(w_ch), pixels_to_EMU(h_ch)),
+      )
+      ws.add_image(img_ch)
+      # Le texte du bloc se décale pour ne pas passer sous le logo du chantier.
+      ws["A2"].alignment = Alignment(
+          horizontal="right", vertical="center", wrap_text=True,
+          indent=2 + int(w_ch / 9) + 1,
+      )
+      # Place restreinte entre les deux logos : texte sur deux lignes, police réduite.
+      txt_labo = str(ws["A2"].value or "")
+      if txt_labo and "\n" not in txt_labo:
+        mots = txt_labo.split(" ")
+        if len(mots) > 2:
+          coupe = min(
+              range(1, len(mots)),
+              key=lambda k: abs(len(" ".join(mots[:k])) - len(" ".join(mots[k:]))),
+          )
+          ws["A2"].value = " ".join(mots[:coupe]) + "\n" + " ".join(mots[coupe:])
+      _f = ws["A2"].font
+      ws["A2"].font = Font(name=_f.name, bold=True, size=9, color=_f.color)
     except Exception:
       pass  # le PV reste généré même si le logo pose problème
 
@@ -867,7 +916,7 @@ def generer_pv_pdf(export_data, infos_header):
   elif moyenne_28j_val >= seuil:
     comment_valeur = "PERFORMANCES MECANIQUES A 28 JOURS SONT CONFORMES"
   else:
-    comment_valeur = "PERFORMANCES MECANIQUES NE SONT PAS CONFORMES"
+    comment_valeur = "PERFORMANCES MECANIQUES NON CONFORMES"
 
   r = blank_row()
   r[0] = "Commentaire :"
@@ -959,36 +1008,57 @@ def generer_pv_pdf(export_data, infos_header):
   else:
     row_heights_final = row_heights
 
-  # Logo LPEE centré dans le bloc "Laboratoire de Contrôle Externe"
+  # Logos : LPEE à gauche, logo du chantier à droite, texte du laboratoire au centre
   logo_path = trouver_logo_lpee()
-  if logo_path:
+  logo_ch_b64 = infos_header.get("logo_chantier") or ""
+  if logo_path or logo_ch_b64:
     try:
+      import base64
       from reportlab.platypus import Image as RLImage
 
       larg_bloc = sum(col_widths[:4])
       hauts = [h for h in row_heights_final[row1:row2 + 1] if h]
       haut_bloc = sum(hauts) if len(hauts) == 2 else 34
-      iw, ih = ImageReader(logo_path).getSize()
-      logo_h = max(haut_bloc - 6, 10)
-      logo_w = logo_h * iw / ih
-      if logo_w > larg_bloc * 0.4:
-        logo_w = larg_bloc * 0.4
-        logo_h = logo_w * ih / iw
-      img = RLImage(logo_path, width=logo_w, height=logo_h)
-      col_logo = logo_w + 10
+
+      img, col_logo = "", 0
+      if logo_path:
+        iw, ih = ImageReader(logo_path).getSize()
+        logo_h = max(haut_bloc - 6, 10)
+        logo_w = logo_h * iw / ih
+        if logo_w > larg_bloc * 0.4:
+          logo_w = larg_bloc * 0.4
+          logo_h = logo_w * ih / iw
+        img = RLImage(logo_path, width=logo_w, height=logo_h)
+        col_logo = logo_w + 10
+
+      img_ch, col_ch = "", 0
+      if logo_ch_b64:
+        octets_ch = base64.b64decode(logo_ch_b64)
+        iw2, ih2 = ImageReader(io.BytesIO(octets_ch)).getSize()
+        ch_h = max(haut_bloc - 6, 10)
+        ch_w = ch_h * iw2 / ih2
+        if ch_w > larg_bloc * 0.22:
+          ch_w = larg_bloc * 0.22
+          ch_h = ch_w * ih2 / iw2
+        img_ch = RLImage(io.BytesIO(octets_ch), width=ch_w, height=ch_h)
+        col_ch = ch_w + 10
+
       cellule = Table(
-          [[img, P(str(clean_na(infos_header.get("type_labo"), type_labo_pv())), size=9, bold=True, color=WHITE)]],
-          colWidths=[col_logo, larg_bloc - col_logo],
+          [[img, P(str(clean_na(infos_header.get("type_labo"), type_labo_pv())), size=9, bold=True, color=WHITE), img_ch]],
+          colWidths=[col_logo, larg_bloc - col_logo - col_ch, col_ch],
           rowHeights=[haut_bloc],
       )
       cellule.setStyle(TableStyle([
           ("BACKGROUND", (0, 0), (-1, -1), DARK),
           ("ALIGN", (0, 0), (0, 0), "LEFT"),
           ("ALIGN", (1, 0), (1, 0), "CENTER"),
+          ("ALIGN", (2, 0), (2, 0), "RIGHT"),
           ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
           ("LEFTPADDING", (0, 0), (0, 0), 5),
           ("LEFTPADDING", (1, 0), (1, 0), 0),
-          ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+          ("RIGHTPADDING", (0, 0), (1, 0), 0),
+          ("RIGHTPADDING", (2, 0), (2, 0), 5),
+          ("LEFTPADDING", (2, 0), (2, 0), 0),
           ("TOPPADDING", (0, 0), (-1, -1), 0),
           ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
           ("GRID", (0, 0), (-1, -1), 0, DARK),
@@ -1368,6 +1438,7 @@ def show(supabase):
         )
 
         infos_header_h = {
+            "logo_chantier": projets_config.logo_chantier_b64(),
             "re_num": ref_pv_projet(),
             "type_labo": type_labo_pv(),
             "dossier": projets_config.dossier_pv("2025-260-05985-2025-0247"),
