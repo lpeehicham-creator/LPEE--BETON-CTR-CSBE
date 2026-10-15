@@ -1224,6 +1224,12 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
         placeholder="ex : 25/260/LGV/ B/",
         help="Préfixe affiché dans la case « RE N° » des PV de ce chantier, devant la référence de contrôle.",
     )
+    logo_ch = st.file_uploader(
+        "Logo du chantier (facultatif)",
+        type=["png", "jpg", "jpeg"],
+        help="Affiché dans l'en-tête des PV de ce chantier, à droite du logo LPEE. "
+             "PNG ou JPG, 2 Mo maximum.",
+    )
     num_depart_ch = st.number_input(
         "N° de démarrage des réceptions",
         min_value=0, value=0, step=1,
@@ -1268,6 +1274,7 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
             supabase, nom_ch, client_ch, current_username, dossier_ch, intitule_ch,
             signataires_ch, ref_pv=ref_pv_ch, type_labo=type_labo_ch,
             num_reception_depart=num_depart_ch,
+            logo=(logo_ch.getvalue() if logo_ch else None),
         )
         if not ok:
           st.error(f"❌ {resultat}")
@@ -1312,6 +1319,17 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
           "Réf. N° du PV (préfixe)", value=info_mod.get("ref_pv") or "",
           placeholder="ex : 25/260/LGV/ B/",
       )
+      _logo_actuel = projets_config.logo_chantier_bytes(pid_mod)
+      if _logo_actuel:
+        st.image(_logo_actuel, caption="Logo actuel du chantier", width=140)
+      logo_m = st.file_uploader(
+          "Nouveau logo du chantier (facultatif)" if _logo_actuel else "Logo du chantier (facultatif)",
+          type=["png", "jpg", "jpeg"], key=f"logo_m_{pid_mod}",
+          help="Affiché dans l'en-tête des PV de ce chantier. PNG ou JPG, 2 Mo maximum.",
+      )
+      suppr_logo_m = st.checkbox(
+          "Supprimer le logo actuel", value=False, key=f"suppr_logo_m_{pid_mod}",
+      ) if _logo_actuel else False
       num_depart_m = st.number_input(
           "N° de démarrage des réceptions",
           min_value=0, step=1, value=int(info_mod.get("num_reception_depart") or 0),
@@ -1354,6 +1372,8 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
             supabase, pid_mod, nom_m, client_m, dossier_m, intitule_m, signataires_m,
             ref_pv=ref_pv_m, type_labo=type_labo_m,
             num_reception_depart=num_depart_m,
+            logo=(logo_m.getvalue() if logo_m else None),
+            supprimer_logo=bool(suppr_logo_m),
         )
         if ok_m:
           try:
