@@ -597,12 +597,17 @@ def generer_pv_excel(export_data, infos_header):
             seuil_min = seuil
             break
 
+    choix_conf = str(infos_header.get("conformite_28j") or "").strip().upper()
     if not cellules_moyennes_28j or moyenne_28j_en_cours:
         formule_commentaires = "PERFORMANCES MECANIQUES A 28 JOURS SERONT DONNES ULTERIEUREMENT."
+    elif choix_conf == "OUI":  # choix du responsable de dossier
+        formule_commentaires = "PERFORMANCES MECANIQUES A 28 JOURS SONT CONFORMES"
+    elif choix_conf == "NON":
+        formule_commentaires = "PERFORMANCES MECANIQUES A 28 JOURS NE SONT PAS CONFORMES"
     else:
         # Conforme seulement si TOUTES les moyennes de séries de 3 à 28 jours sont >= seuil
         min_28j = "MIN(" + ",".join(cellules_moyennes_28j) + ")"
-        formule_commentaires = f'=IF({min_28j}>={seuil_min}, "{obs_defaut}", "PERFORMANCES MECANIQUES NON CONFORMES")'
+        formule_commentaires = f'=IF({min_28j}>={seuil_min}, "{obs_defaut}", "PERFORMANCES MECANIQUES A 28 JOURS NE SONT PAS CONFORMES")'
 
     format_cell(ws.cell(row=next_row, column=2, value=formule_commentaires), font=font_bold, align=align_left)
     for c in range(1, 9): ws.cell(row=next_row, column=c).border = border_cell
