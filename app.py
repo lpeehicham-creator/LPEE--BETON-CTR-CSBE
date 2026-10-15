@@ -1194,6 +1194,7 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
             {
                 "N° de dossier": _reg[p].get("num_dossier") or "-",
                 "Réf. N° PV": _reg[p].get("ref_pv") or "-",
+                "N° départ réception": _reg[p].get("num_reception_depart") or "-",
                 "Laboratoire (PV)": _reg[p].get("type_labo") or projets_config.TYPE_LABO_DEFAUT,
                 "Chantier": _reg[p]["nom"],
                 "Client": _reg[p]["client"],
@@ -1222,6 +1223,13 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
         "Réf. N° du PV (préfixe)",
         placeholder="ex : 25/260/LGV/ B/",
         help="Préfixe affiché dans la case « RE N° » des PV de ce chantier, devant la référence de contrôle.",
+    )
+    num_depart_ch = st.number_input(
+        "N° de démarrage des réceptions",
+        min_value=0, value=0, step=1,
+        help="Premier N° de réception attribué automatiquement aux bétonnages avec "
+             "prélèvement de ce chantier (les suivants s'incrémentent de 1). "
+             "Laisser à 0 pour commencer à 1.",
     )
     type_labo_ch = st.selectbox(
         "Type de laboratoire (affiché sur les PV de béton)",
@@ -1258,7 +1266,8 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
       else:
         ok, resultat = projets_config.creer_projet(
             supabase, nom_ch, client_ch, current_username, dossier_ch, intitule_ch,
-            signataires_ch, ref_pv=ref_pv_ch, type_labo=type_labo_ch
+            signataires_ch, ref_pv=ref_pv_ch, type_labo=type_labo_ch,
+            num_reception_depart=num_depart_ch,
         )
         if not ok:
           st.error(f"❌ {resultat}")
@@ -1303,6 +1312,13 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
           "Réf. N° du PV (préfixe)", value=info_mod.get("ref_pv") or "",
           placeholder="ex : 25/260/LGV/ B/",
       )
+      num_depart_m = st.number_input(
+          "N° de démarrage des réceptions",
+          min_value=0, step=1, value=int(info_mod.get("num_reception_depart") or 0),
+          key=f"num_depart_m_{pid_mod}",
+          help="Premier N° de réception attribué automatiquement aux bétonnages avec "
+               "prélèvement. 0 = commencer à 1 (ou à la suite du dernier N° numérique existant).",
+      )
       _tl_actuel = info_mod.get("type_labo") or projets_config.TYPE_LABO_DEFAUT
       type_labo_m = st.selectbox(
           "Type de laboratoire (affiché sur les PV de béton)",
@@ -1337,6 +1353,7 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
         ok_m, msg_m = projets_config.modifier_projet(
             supabase, pid_mod, nom_m, client_m, dossier_m, intitule_m, signataires_m,
             ref_pv=ref_pv_m, type_labo=type_labo_m,
+            num_reception_depart=num_depart_m,
         )
         if ok_m:
           try:
@@ -1350,6 +1367,7 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
                     "nom": info_mod["nom"], "client": info_mod["client"],
                     "num_dossier": info_mod.get("num_dossier") or "",
                     "ref_pv": info_mod.get("ref_pv") or "",
+                    "num_reception_depart": info_mod.get("num_reception_depart") or 0,
                     "type_labo": info_mod.get("type_labo") or projets_config.TYPE_LABO_DEFAUT,
                     "signataires": info_mod.get("signataires") or [],
                 },
@@ -1357,6 +1375,7 @@ elif page == "Chantiers" and current_role in projets_config.ROLES_CREATEURS_PROJ
                     "nom": nom_m.strip(), "client": client_m.strip(),
                     "num_dossier": dossier_m.strip(),
                     "ref_pv": ref_pv_m.strip(),
+                    "num_reception_depart": int(num_depart_m or 0),
                     "type_labo": type_labo_m,
                     "signataires": projets_config.nettoyer_signataires(signataires_m),
                 },
