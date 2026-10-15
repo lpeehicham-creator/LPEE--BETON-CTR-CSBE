@@ -197,6 +197,10 @@ def trouver_logo_lpee():
 # ==============================================================================
 # 2. GÉNÉRATION DU PROCÈS-VERBAL PDF (FORMAT LPEE)
 # ==============================================================================
+TEXTE_CONFORME_28J = "PERFORMANCES MECANIQUES A 28 JOURS SONT CONFORMES"
+TEXTE_NON_CONFORME_28J = "PERFORMANCES MECANIQUES A 28 JOURS NE SONT PAS CONFORMES"
+
+
 @st.cache_data(show_spinner=False)
 def generer_pv_excel(export_data, infos_header):
   wb = openpyxl.Workbook()
@@ -431,12 +435,17 @@ def generer_pv_excel(export_data, infos_header):
        if k in str(clean_na(infos_header.get("classe_beton"), "C35/45")).upper()),
       35.0,
   )
+  choix_conf = str(infos_header.get("conformite_28j") or "").strip().upper()
   if not a_des_28j or est_en_cours_28j or moyenne_28j_val is None:
     comment_valeur = "LES PERFORMANCES MÉCANIQUES À 28 JOURS SERONT COMMUNIQUÉES ULTÉRIEUREMENT.."
-  elif moyenne_28j_val >= seuil:
-    comment_valeur = "PERFORMANCES MECANIQUES A 28 JOURS SONT CONFORMES"
+  elif choix_conf == "OUI":  # choix du responsable de dossier
+    comment_valeur = TEXTE_CONFORME_28J
+  elif choix_conf == "NON":
+    comment_valeur = TEXTE_NON_CONFORME_28J
+  elif moyenne_28j_val >= seuil:  # aucun choix : calcul automatique
+    comment_valeur = TEXTE_CONFORME_28J
   else:
-    comment_valeur = "PERFORMANCES MECANIQUES NON CONFORMES"
+    comment_valeur = TEXTE_NON_CONFORME_28J
 
   row_comment = ligne_courante
   set_cell(row_comment, 1, "Commentaire :", bold=True, fill=LABEL_FILL, align="left")
@@ -909,14 +918,19 @@ def generer_pv_pdf(export_data, infos_header):
       ),
       35.0,
   )
+  choix_conf = str(infos_header.get("conformite_28j") or "").strip().upper()
   if not a_des_28j or est_en_cours_28j or moyenne_28j_val is None:
     comment_valeur = (
         "LES PERFORMANCES MÉCANIQUES À 28 JOURS SERONT COMMUNIQUÉES ULTÉRIEUREMENT.."
     )
-  elif moyenne_28j_val >= seuil:
-    comment_valeur = "PERFORMANCES MECANIQUES A 28 JOURS SONT CONFORMES"
+  elif choix_conf == "OUI":  # choix du responsable de dossier
+    comment_valeur = TEXTE_CONFORME_28J
+  elif choix_conf == "NON":
+    comment_valeur = TEXTE_NON_CONFORME_28J
+  elif moyenne_28j_val >= seuil:  # aucun choix : calcul automatique
+    comment_valeur = TEXTE_CONFORME_28J
   else:
-    comment_valeur = "PERFORMANCES MECANIQUES NON CONFORMES"
+    comment_valeur = TEXTE_NON_CONFORME_28J
 
   r = blank_row()
   r[0] = "Commentaire :"
@@ -1437,7 +1451,12 @@ def show(supabase):
             supabase, b_id_h, info_b_h, sample_h
         )
 
+        _conf_actuelle = str(info_b_h.get("conformite_28j") or "").strip().upper()
+        if _conf_actuelle not in ("OUI", "NON"):
+          _conf_actuelle = ""
+
         infos_header_h = {
+            "conformite_28j": _conf_actuelle,
             "logo_chantier": projets_config.logo_chantier_b64(),
             "re_num": ref_pv_projet(),
             "type_labo": type_labo_pv(),
@@ -1474,6 +1493,62 @@ def show(supabase):
                 or sample_h.get("technicien")
             ),
         }
+
+        # --- Commentaire « performances mécaniques à 28 jours » : choix du responsable de dossier ---
+        _libelles_conf = {
+            "": "Automatique (selon les résultats)",
+            "OUI": "OUI — performances conformes",
+            "NON": "NON — performances non conformes",
+        }
+        if is_admin or role_norm == "responsable_dossier":
+          st.markdown("##### ✅ Commentaire du PV : performances mécaniques à 28 jours")
+          _cc1, _cc2 = st.columns([3, 1])
+          _choix_conf = _cc1.selectbox(
+              "Les performances mécaniques à 28 jours sont-elles conformes ?",
+              list(_libelles_conf.keys()),
+              index=list(_libelles_conf.keys()).index(_conf_actuelle),
+              format_func=lambda k: _libelles_conf[k],
+              key=f"conf28_{b_id_h}",
+              help="OUI : « PERFORMANCES MECANIQUES A 28 JOURS SONT CONFORMES ». "
+                   "NON : « PERFORMANCES MECANIQUES A 28 JOURS NE SONT PAS CONFORMES ». "
+                   "Tant que les résultats à 28 jours ne sont pas saisis, le PV indique "
+                   "qu'ils seront communiqués ultérieurement.",
+          )
+          _cc2.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
+          if _cc2.button("💾 Enregistrer le choix", key=f"btn_conf28_{b_id_h}", use_container_width=True):
+            if _choix_conf == _conf_actuelle:
+              st.info("Aucun changement à enregistrer.")
+            else:
+              try:
+                projets_config.filtrer_projet_actif(
+                    supabase.table("suivi_betonnage")
+                    .update({"conformite_28j": _choix_conf or None})
+                    .eq("id", b_id_h)
+                ).execute()
+                try:
+                  from audit_log import enregistrer_modification
+                  enregistrer_modification(
+                      supabase,
+                      table_concernee="suivi_betonnage",
+                      enregistrement_id=b_id_h,
+                      action="MODIFICATION",
+                      anciennes_valeurs={"conformite_28j": _conf_actuelle or None},
+                      nouvelles_valeurs={"conformite_28j": _choix_conf or None},
+                  )
+                except Exception:
+                  pass
+                st.success("✅ Choix enregistré : le PV sera généré avec ce commentaire.")
+                st.rerun()
+              except Exception as e_conf:
+                if "conformite_28j" in str(e_conf):
+                  st.error("❌ Colonne manquante : exécutez ajout_conformite_28j.sql dans Supabase.")
+                else:
+                  st.error(f"❌ Enregistrement impossible : {e_conf}")
+        else:
+          st.caption(
+              "Commentaire du PV (performances à 28 jours) : "
+              f"{_libelles_conf[_conf_actuelle]} — choisi par le responsable de dossier."
+          )
 
         nom_rec_clean = nettoyer_nom_fichier(ref_ctrl_h)
         date_fab_clean = formater_date_nom_fichier(date_coulee_h)
