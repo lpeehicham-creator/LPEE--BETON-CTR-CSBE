@@ -660,12 +660,12 @@ def attribuer_acces(supabase, username, projet_id):
 # Rôles qu'un responsable de chantier peut attribuer, modifier ou retirer. Le
 # rôle `admin` ne peut être donné que par un administrateur.
 ROLES_EQUIPE = {
-    "laboratoire": "Technicien laboratoire (essais + bétonnage)",
-    "coordinateur_essais": "Coordinateur des essais (mêmes accès qu'un technicien laboratoire)",
-    "responsable_dossier": "Responsable de dossier (mêmes accès qu'un technicien laboratoire)",
-    "ingenieur_dossier": "L'ingénieur chargé de dossier (mêmes accès qu'un technicien laboratoire)",
-    "chef_laboratoire": "Chef du laboratoire (mêmes accès qu'un technicien laboratoire)",
-    "restricted_betonnage": "Opérateur bétonnage (saisie du suivi de bétonnage)",
+    "laboratoire": "Technicien(ne) laboratoire (essais + bétonnage)",
+    "coordinateur_essais": "Coordinateur(trice) des essais (mêmes accès qu'un(e) technicien(ne) laboratoire)",
+    "responsable_dossier": "Responsable de dossier (mêmes accès qu'un(e) technicien(ne) laboratoire)",
+    "ingenieur_dossier": "L'ingénieur(e) chargé(e) de dossier (mêmes accès qu'un(e) technicien(ne) laboratoire)",
+    "chef_laboratoire": "Chef(fe) du laboratoire (mêmes accès qu'un(e) technicien(ne) laboratoire)",
+    "restricted_betonnage": "Opérateur(trice) bétonnage (saisie du suivi de bétonnage)",
     "user": "Consultation (lecture seule)",
 }
 
