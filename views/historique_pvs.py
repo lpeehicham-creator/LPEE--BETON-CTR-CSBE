@@ -444,15 +444,22 @@ def generer_pv_excel(export_data, infos_header):
   else:
     comment_valeur = TEXTE_NON_CONFORME_28J
 
-  row_comment = ligne_courante
-  set_cell(row_comment, 1, "Commentaire :", bold=True, fill=LABEL_FILL, align="left")
-  merge(row_comment, 2, row_comment, 8)
-  set_cell(row_comment, 2, comment_valeur, bold=True, align="left")
+  # « Sans commentaire » : la ligne « Commentaire » n'apparaît pas du tout sur le PV
+  sans_commentaire = (
+      str(infos_header.get("commentaire_pv") or "").strip().upper() == "AUCUN"
+  )
+  if sans_commentaire:
+    row_comment = None
+  else:
+    row_comment = ligne_courante
+    set_cell(row_comment, 1, "Commentaire :", bold=True, fill=LABEL_FILL, align="left")
+    merge(row_comment, 2, row_comment, 8)
+    set_cell(row_comment, 2, comment_valeur, bold=True, align="left")
 
   # Cases de visa : signataires propres au chantier (créés avec le chantier)
   visas_pv = projets_config.visas_pv()
   cols_visa = projets_config.colonnes_visas(len(visas_pv))
-  row_visa_titre = row_comment + 1
+  row_visa_titre = ligne_courante if sans_commentaire else row_comment + 1
   row_visa_nom = row_visa_titre + 1
   for (titre_v, nom_v), (c1_v, c2_v) in zip(visas_pv, cols_visa):
     merge(row_visa_titre, c1_v, row_visa_titre, c2_v)
@@ -926,17 +933,21 @@ def generer_pv_pdf(export_data, infos_header):
   else:
     comment_valeur = TEXTE_NON_CONFORME_28J
 
-  r = blank_row()
-  r[0] = "Commentaire :"
-  r[1] = P(comment_valeur, size=8.5, bold=True, align="LEFT")
-  data.append(r)
-  row_comment = len(data) - 1
-  spans.append((1, row_comment, 7, row_comment))
-  bg.append((0, row_comment, 0, row_comment, LABEL_BG))
-  fonts.append((0, row_comment, 0, row_comment, "Helvetica-Bold", 8.5, BLACK))
-  fonts.append((1, row_comment, 7, row_comment, "Helvetica-Bold", 8.5, BLACK))
-  aligns.append((0, row_comment, 0, row_comment, "LEFT"))
-  aligns.append((1, row_comment, 7, row_comment, "LEFT"))
+  # « Sans commentaire » : la ligne « Commentaire » n'apparaît pas du tout sur le PV
+  if str(infos_header.get("commentaire_pv") or "").strip().upper() == "AUCUN":
+    row_comment = None
+  else:
+    r = blank_row()
+    r[0] = "Commentaire :"
+    r[1] = P(comment_valeur, size=8.5, bold=True, align="LEFT")
+    data.append(r)
+    row_comment = len(data) - 1
+    spans.append((1, row_comment, 7, row_comment))
+    bg.append((0, row_comment, 0, row_comment, LABEL_BG))
+    fonts.append((0, row_comment, 0, row_comment, "Helvetica-Bold", 8.5, BLACK))
+    fonts.append((1, row_comment, 7, row_comment, "Helvetica-Bold", 8.5, BLACK))
+    aligns.append((0, row_comment, 0, row_comment, "LEFT"))
+    aligns.append((1, row_comment, 7, row_comment, "LEFT"))
 
   # Cases de visa : signataires propres au chantier (créés avec le chantier)
   visas_pv = projets_config.visas_pv()
@@ -1491,7 +1502,7 @@ def show(supabase):
         # --- Commentaire du PV : automatique selon les résultats, ou PV sans commentaire ---
         _libelles_comm = {
             "AUTO": "Commentaire automatique (selon les résultats)",
-            "AUCUN": "Sans commentaire (case vide sur le PV)",
+            "AUCUN": "Sans commentaire (la ligne n'apparaît pas sur le PV)",
         }
         if peut_telecharger:  # mêmes personnes que celles qui téléchargent le PV
           _cc1, _cc2 = st.columns([3, 1])
@@ -1503,7 +1514,7 @@ def show(supabase):
               key=f"comm_pv_{b_id_h}",
               help="Automatique : le PV indique si les performances à 28 jours sont "
                    "conformes ou non (ou qu'elles seront communiquées ultérieurement). "
-                   "Sans commentaire : la case « Commentaire » du PV reste vide.",
+                   "Sans commentaire : la ligne « Commentaire » ne figure pas sur le PV.",
           )
           _cc2.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
           if _cc2.button("💾 Enregistrer le choix", key=f"btn_comm_pv_{b_id_h}", use_container_width=True):
