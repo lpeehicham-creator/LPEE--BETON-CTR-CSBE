@@ -700,19 +700,19 @@ with st.sidebar:
     ]
   elif current_role in ["laboratoire", "technicien", "coordinateur_essais", "responsable_dossier", "ingenieur_dossier", "chef_laboratoire"]:
     if current_role == "coordinateur_essais":
-      st.info("Rôle : **COORDINATEUR DES ESSAIS**")
+      st.info("Rôle : **COORDINATEUR(TRICE) DES ESSAIS**")
     elif current_role == "responsable_dossier":
       st.info("Rôle : **RESPONSABLE DE DOSSIER**")
     elif current_role == "ingenieur_dossier":
-      st.info("Rôle : **L'INGÉNIEUR CHARGÉ DE DOSSIER**")
+      st.info("Rôle : **L'INGÉNIEUR(E) CHARGÉ(E) DE DOSSIER**")
     elif current_role == "chef_laboratoire":
-      st.info("Rôle : **CHEF DU LABORATOIRE**")
+      st.info("Rôle : **CHEF(FE) DU LABORATOIRE**")
     elif current_username == "HANINE":
       st.info("Rôle : **RESPONSABLE DE DOSSIER**")
     elif current_username == "AMINA":
       st.info("Rôle : **TECHNICIENNE LABORATOIRE (Saisie/Modification)**")
     else:
-      st.info("Rôle : **TECHNICIEN LABORATOIRE**")
+      st.info("Rôle : **TECHNICIEN(NE) LABORATOIRE**")
     st.markdown("---")
     available_pages = [
         "Accueil",
