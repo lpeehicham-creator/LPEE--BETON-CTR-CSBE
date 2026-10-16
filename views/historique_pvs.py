@@ -435,14 +435,11 @@ def generer_pv_excel(export_data, infos_header):
        if k in str(clean_na(infos_header.get("classe_beton"), "C35/45")).upper()),
       35.0,
   )
-  choix_conf = str(infos_header.get("conformite_28j") or "").strip().upper()
-  if not a_des_28j or est_en_cours_28j or moyenne_28j_val is None:
+  if str(infos_header.get("commentaire_pv") or "").strip().upper() == "AUCUN":
+    comment_valeur = ""  # PV sans commentaire (choix de l'utilisateur)
+  elif not a_des_28j or est_en_cours_28j or moyenne_28j_val is None:
     comment_valeur = "LES PERFORMANCES MÉCANIQUES À 28 JOURS SERONT COMMUNIQUÉES ULTÉRIEUREMENT.."
-  elif choix_conf == "OUI":  # choix du responsable de dossier
-    comment_valeur = TEXTE_CONFORME_28J
-  elif choix_conf == "NON":
-    comment_valeur = TEXTE_NON_CONFORME_28J
-  elif moyenne_28j_val >= seuil:  # aucun choix : calcul automatique
+  elif moyenne_28j_val >= seuil:  # commentaire automatique selon les résultats
     comment_valeur = TEXTE_CONFORME_28J
   else:
     comment_valeur = TEXTE_NON_CONFORME_28J
@@ -918,16 +915,13 @@ def generer_pv_pdf(export_data, infos_header):
       ),
       35.0,
   )
-  choix_conf = str(infos_header.get("conformite_28j") or "").strip().upper()
-  if not a_des_28j or est_en_cours_28j or moyenne_28j_val is None:
+  if str(infos_header.get("commentaire_pv") or "").strip().upper() == "AUCUN":
+    comment_valeur = ""  # PV sans commentaire (choix de l'utilisateur)
+  elif not a_des_28j or est_en_cours_28j or moyenne_28j_val is None:
     comment_valeur = (
         "LES PERFORMANCES MÉCANIQUES À 28 JOURS SERONT COMMUNIQUÉES ULTÉRIEUREMENT.."
     )
-  elif choix_conf == "OUI":  # choix du responsable de dossier
-    comment_valeur = TEXTE_CONFORME_28J
-  elif choix_conf == "NON":
-    comment_valeur = TEXTE_NON_CONFORME_28J
-  elif moyenne_28j_val >= seuil:  # aucun choix : calcul automatique
+  elif moyenne_28j_val >= seuil:  # commentaire automatique selon les résultats
     comment_valeur = TEXTE_CONFORME_28J
   else:
     comment_valeur = TEXTE_NON_CONFORME_28J
@@ -1451,12 +1445,12 @@ def show(supabase):
             supabase, b_id_h, info_b_h, sample_h
         )
 
-        _conf_actuelle = str(info_b_h.get("conformite_28j") or "").strip().upper()
-        if _conf_actuelle not in ("OUI", "NON"):
-          _conf_actuelle = ""
+        _comm_actuel = str(info_b_h.get("commentaire_pv") or "").strip().upper()
+        if _comm_actuel != "AUCUN":
+          _comm_actuel = "AUTO"
 
         infos_header_h = {
-            "conformite_28j": _conf_actuelle,
+            "commentaire_pv": _comm_actuel,
             "logo_chantier": projets_config.logo_chantier_b64(),
             "re_num": ref_pv_projet(),
             "type_labo": type_labo_pv(),
@@ -1494,35 +1488,32 @@ def show(supabase):
             ),
         }
 
-        # --- Commentaire « performances mécaniques à 28 jours » : choix du responsable de dossier ---
-        _libelles_conf = {
-            "": "Automatique (selon les résultats)",
-            "OUI": "OUI — performances conformes",
-            "NON": "NON — performances non conformes",
+        # --- Commentaire du PV : automatique selon les résultats, ou PV sans commentaire ---
+        _libelles_comm = {
+            "AUTO": "Commentaire automatique (selon les résultats)",
+            "AUCUN": "Sans commentaire (case vide sur le PV)",
         }
         if peut_telecharger:  # mêmes personnes que celles qui téléchargent le PV
-          st.markdown("##### ✅ Commentaire du PV : performances mécaniques à 28 jours")
           _cc1, _cc2 = st.columns([3, 1])
-          _choix_conf = _cc1.selectbox(
-              "Les performances mécaniques à 28 jours sont-elles conformes ?",
-              list(_libelles_conf.keys()),
-              index=list(_libelles_conf.keys()).index(_conf_actuelle),
-              format_func=lambda k: _libelles_conf[k],
-              key=f"conf28_{b_id_h}",
-              help="OUI : « PERFORMANCES MECANIQUES A 28 JOURS SONT CONFORMES ». "
-                   "NON : « PERFORMANCES MECANIQUES A 28 JOURS NE SONT PAS CONFORMES ». "
-                   "Tant que les résultats à 28 jours ne sont pas saisis, le PV indique "
-                   "qu'ils seront communiqués ultérieurement.",
+          _choix_comm = _cc1.selectbox(
+              "💬 Commentaire du PV",
+              list(_libelles_comm.keys()),
+              index=list(_libelles_comm.keys()).index(_comm_actuel),
+              format_func=lambda k: _libelles_comm[k],
+              key=f"comm_pv_{b_id_h}",
+              help="Automatique : le PV indique si les performances à 28 jours sont "
+                   "conformes ou non (ou qu'elles seront communiquées ultérieurement). "
+                   "Sans commentaire : la case « Commentaire » du PV reste vide.",
           )
           _cc2.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
-          if _cc2.button("💾 Enregistrer le choix", key=f"btn_conf28_{b_id_h}", use_container_width=True):
-            if _choix_conf == _conf_actuelle:
+          if _cc2.button("💾 Enregistrer le choix", key=f"btn_comm_pv_{b_id_h}", use_container_width=True):
+            if _choix_comm == _comm_actuel:
               st.info("Aucun changement à enregistrer.")
             else:
               try:
                 projets_config.filtrer_projet_actif(
                     supabase.table("suivi_betonnage")
-                    .update({"conformite_28j": _choix_conf or None})
+                    .update({"commentaire_pv": _choix_comm})
                     .eq("id", b_id_h)
                 ).execute()
                 try:
@@ -1532,29 +1523,18 @@ def show(supabase):
                       table_concernee="suivi_betonnage",
                       enregistrement_id=b_id_h,
                       action="MODIFICATION",
-                      anciennes_valeurs={"conformite_28j": _conf_actuelle or None},
-                      nouvelles_valeurs={"conformite_28j": _choix_conf or None},
+                      anciennes_valeurs={"commentaire_pv": _comm_actuel},
+                      nouvelles_valeurs={"commentaire_pv": _choix_comm},
                   )
                 except Exception:
                   pass
-                st.success("✅ Choix enregistré : le PV sera généré avec ce commentaire.")
+                st.success("✅ Choix enregistré : le PV sera généré avec ce réglage.")
                 st.rerun()
-              except Exception as e_conf:
-                if "conformite_28j" in str(e_conf):
-                  st.error("❌ Colonne manquante : exécutez ajout_conformite_28j.sql dans Supabase.")
+              except Exception as e_comm:
+                if "commentaire_pv" in str(e_comm):
+                  st.error("❌ Colonne manquante : exécutez ajout_commentaire_pv.sql dans Supabase.")
                 else:
-                  st.error(f"❌ Enregistrement impossible : {e_conf}")
-        else:
-          if _conf_actuelle:
-            st.caption(
-                "Commentaire du PV (performances à 28 jours) : "
-                f"{_libelles_conf[_conf_actuelle]}"
-            )
-          else:
-            st.caption(
-                "Commentaire du PV (performances à 28 jours) : automatique, selon les "
-                "résultats."
-            )
+                  st.error(f"❌ Enregistrement impossible : {e_comm}")
 
         nom_rec_clean = nettoyer_nom_fichier(ref_ctrl_h)
         date_fab_clean = formater_date_nom_fichier(date_coulee_h)
