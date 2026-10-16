@@ -1214,6 +1214,10 @@ def show(supabase):
       or role_norm in ["laboratoire", "coordinateur_essais", "responsable_dossier", "ingenieur_dossier", "chef_laboratoire", "labo", "qualite"]
   )
 
+  # Le technicien laboratoire télécharge le PV en PDF uniquement (pas en Excel).
+  est_technicien_labo = role_norm in ["laboratoire", "technicien", "labo"] and not is_admin
+  peut_excel = peut_telecharger and not est_technicien_labo
+
   if (
       role not in ["laboratoire", "coordinateur_essais", "responsable_dossier", "ingenieur_dossier", "chef_laboratoire", "labo", "admin", "responsable_labo", "responsable_chantier", "qualite"]
       and not is_admin
@@ -1555,7 +1559,10 @@ def show(supabase):
           st.info("🔒 Le téléchargement des PVs est réservé aux responsables de chantier et au laboratoire.")
         else:
           nom_fichier_pv_xlsx = f"PV_{nom_rec_clean}_{date_fab_clean}.xlsx"
-          col_pdf, col_xlsx = st.columns(2)
+          if peut_excel:
+            col_pdf, col_xlsx = st.columns(2)
+          else:  # technicien laboratoire : PDF seulement, sur toute la largeur
+            col_pdf, col_xlsx = st.container(), None
           try:
             col_pdf.download_button(
                 label=f"📄 Télécharger le PV en PDF ({nom_fichier_pv})",
@@ -1568,17 +1575,18 @@ def show(supabase):
             )
           except Exception as e_pdf:
             col_pdf.error(f"❌ Génération du PDF impossible : {e_pdf}")
-          try:
-            col_xlsx.download_button(
-                label=f"📊 Télécharger le PV en Excel ({nom_fichier_pv_xlsx})",
-                data=generer_pv_excel(export_data_h, infos_header_h),
-                file_name=nom_fichier_pv_xlsx,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key="btn_download_hist_excel",
-            )
-          except Exception as e_xlsx:
-            col_xlsx.error(f"❌ Génération de l'Excel impossible : {e_xlsx}")
+          if col_xlsx is not None:  # bouton Excel : pas pour le technicien laboratoire
+            try:
+              col_xlsx.download_button(
+                  label=f"📊 Télécharger le PV en Excel ({nom_fichier_pv_xlsx})",
+                  data=generer_pv_excel(export_data_h, infos_header_h),
+                  file_name=nom_fichier_pv_xlsx,
+                  mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                  use_container_width=True,
+                  key="btn_download_hist_excel",
+              )
+            except Exception as e_xlsx:
+              col_xlsx.error(f"❌ Génération de l'Excel impossible : {e_xlsx}")
 
     st.markdown("---")
     st.markdown("##### 📊 Base de données globale")
