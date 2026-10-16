@@ -19,6 +19,24 @@ import projets_config
 # =========================================================
 
 
+def _ouvrage_complet(ouvrage, partie):
+  """Colonne « Ouvrage » des synthèses = Ouvrage + Partie d'ouvrage."""
+  def _txt(v):
+    return "" if v is None or (isinstance(v, float) and v != v) else str(v).strip()
+  o, p = _txt(ouvrage), _txt(partie)
+  if o and p and p.lower() != o.lower():
+    return f"{o} - {p}"
+  return o or p or None
+
+
+def _combiner_ouvrage_liste(lignes):
+  """Remplace `ouvrage` par « Ouvrage - Partie d'ouvrage » dans une liste de fiches."""
+  for ligne in lignes or []:
+    if isinstance(ligne, dict) and "ouvrage" in ligne:
+      ligne["ouvrage"] = _ouvrage_complet(ligne.get("ouvrage"), ligne.get("partie_ouvrage"))
+  return lignes
+
+
 def extract_numeric(val):
   if pd.isna(val) or val is None:
     return None
@@ -1299,6 +1317,7 @@ def load_and_process_controle_data(supabase):
             "num_reception": "ref_controle_b",
             "date_livraison": "date_coulee_b",
             "ouvrage": "ouvrage_b",
+            "partie_ouvrage": "partie_ouvrage_b",
         }
     )
     # Jointure directe via betonnage_id (clé étrangère fiable), au lieu de
@@ -1306,12 +1325,18 @@ def load_and_process_controle_data(supabase):
     # ne jamais correspondre exactement — c'est ce qui laissait Réf.
     # Contrôle, Affaissement et Temp. Béton vides pour certaines lignes.
     if "betonnage_id" in df_raw.columns and "id" in df_betonnage.columns:
-      cols_a_joindre = [c for c in ["id", "ref_controle_b", "affaissement_mm_b", "temp_beton_C_b"] if c in df_betonnage.columns]
+      cols_a_joindre = [c for c in ["id", "ref_controle_b", "affaissement_mm_b", "temp_beton_C_b", "partie_ouvrage_b"] if c in df_betonnage.columns]
       df_raw = df_raw.merge(
           df_betonnage[cols_a_joindre],
           left_on="betonnage_id", right_on="id", how="left",
           suffixes=("", "_dup"),
       )
+      # Colonne « Ouvrage » = Ouvrage + Partie d'ouvrage
+      if "partie_ouvrage_b" in df_raw.columns and "ouvrage" in df_raw.columns:
+        df_raw["ouvrage"] = [
+            _ouvrage_complet(o, p)
+            for o, p in zip(df_raw["ouvrage"], df_raw["partie_ouvrage_b"])
+        ]
 
   def clean_echeance(val):
     val_str = str(val).lower().strip()
@@ -1541,7 +1566,7 @@ def show(supabase):
             .eq("date_livraison", str(selected_date))
             .execute()
         )
-        data = res.data if res else []
+        data = _combiner_ouvrage_liste(res.data if res else [])
 
         classes_j = ["Toutes"]
         ouvrages_j = []
@@ -1704,7 +1729,7 @@ def show(supabase):
             .lte("date_livraison", date_fin)
             .execute()
         )
-        data_m = res_m.data if res_m else []
+        data_m = _combiner_ouvrage_liste(res_m.data if res_m else [])
 
         classes_m = ["Toutes"]
         ouvrages_m = []
