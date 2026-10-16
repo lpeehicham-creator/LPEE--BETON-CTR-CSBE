@@ -647,6 +647,146 @@ def exporter_dataframe_excel(df, date_chaine):
     return buffer
 
 
+# Colonnes du tableau des réceptions : (clé interne, intitulé imprimé, largeur Excel)
+_COLONNES_RECEPTION_IMPRESSION = [
+    ("1-Numero de reception", "N° Réception", 14),
+    ("2-Date de livraison", "Date de livraison", 16),
+    ("3-Nb d'éprouvettes", "Nb d'éprouvettes", 17),
+    ("4-Classe de béton", "Classe de béton", 14),
+    ("5-Ouvrage", "Ouvrage", 26),
+    ("6-Partie d'ouvrage", "Partie d'ouvrage", 26),
+    ("7-Affaissement", "Affaissement", 17),
+    ("8-Temperature de béton frais", "Température béton", 16),
+    ("9-Technicien prélèvement", "Technicien (prélèvement)", 24),
+]
+
+
+def _df_reception_impression(df):
+    """DataFrame des réceptions -> colonnes imprimables (intitulés propres)."""
+    cles = [c for c, _, _ in _COLONNES_RECEPTION_IMPRESSION if c in df.columns]
+    noms = {c: n for c, n, _ in _COLONNES_RECEPTION_IMPRESSION}
+    return df[cles].rename(columns=noms)
+
+
+def exporter_receptions_excel_a4(df, titre, sous_titre=""):
+    """Tableau des réceptions en Excel, mis en page pour imprimer en A4 paysage
+    (1 page de large, ligne d'en-tête répétée, pied de page numéroté)."""
+    d = _df_reception_impression(df)
+    largeurs = {n: w for _, n, w in _COLONNES_RECEPTION_IMPRESSION}
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Réceptions"
+    nb_col = max(len(d.columns), 1)
+    fin_col = openpyxl.utils.get_column_letter(nb_col)
+
+    fin = Side(style="thin", color="000000")
+    bordure = Border(left=fin, right=fin, top=fin, bottom=fin)
+
+    ws.merge_cells(f"A1:{fin_col}1")
+    ws["A1"] = titre
+    ws["A1"].font = Font(bold=True, size=14, color="FFFFFF")
+    ws["A1"].fill = PatternFill("solid", fgColor="1F4E79")
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 26
+    ws.merge_cells(f"A2:{fin_col}2")
+    ws["A2"] = sous_titre
+    ws["A2"].font = Font(italic=True, size=10)
+    ws["A2"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ligne_entete = 4
+    for j, nom in enumerate(d.columns, start=1):
+        c = ws.cell(row=ligne_entete, column=j, value=nom)
+        c.font = Font(bold=True, size=10)
+        c.fill = PatternFill("solid", fgColor="D9E2F3")
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border = bordure
+        ws.column_dimensions[openpyxl.utils.get_column_letter(j)].width = largeurs.get(nom, 16)
+    ws.row_dimensions[ligne_entete].height = 30
+
+    for i, ligne in enumerate(d.itertuples(index=False), start=ligne_entete + 1):
+        for j, val in enumerate(ligne, start=1):
+            c = ws.cell(row=i, column=j, value=("-" if val is None or str(val) == "" else val))
+            c.font = Font(size=10)
+            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            c.border = bordure
+        ws.row_dimensions[i].height = 24
+
+    derniere = ligne_entete + max(len(d), 1)
+    # --- Mise en page : A4 paysage, 1 page de large, en-tête répété ---
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr = openpyxl.worksheet.properties.PageSetupProperties(fitToPage=True)
+    ws.page_margins = PageMargins(left=0.4, right=0.4, top=0.5, bottom=0.6, header=0.25, footer=0.3)
+    ws.print_options.horizontalCentered = True
+    ws.print_title_rows = f"{ligne_entete}:{ligne_entete}"
+    ws.print_area = f"A1:{fin_col}{derniere}"
+    ws.oddFooter.left.text = "LPEE - CTR-CSB"
+    ws.oddFooter.center.text = "Page &P / &N"
+    ws.oddFooter.right.text = "Imprimé le &D"
+    ws.freeze_panes = f"A{ligne_entete + 1}"
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+def exporter_receptions_pdf_a4(df, titre, sous_titre=""):
+    """Tableau des réceptions en PDF A4 paysage (en-tête répété, pages numérotées)."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    d = _df_reception_impression(df)
+    largeurs = {n: w for _, n, w in _COLONNES_RECEPTION_IMPRESSION}
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=landscape(A4),
+        leftMargin=10 * mm, rightMargin=10 * mm, topMargin=10 * mm, bottomMargin=14 * mm,
+        title=titre,
+    )
+    st_titre = ParagraphStyle("t", fontName="Helvetica-Bold", fontSize=14, alignment=1, spaceAfter=2)
+    st_sous = ParagraphStyle("s", fontName="Helvetica-Oblique", fontSize=9, alignment=1, spaceAfter=8)
+    st_head = ParagraphStyle("h", fontName="Helvetica-Bold", fontSize=9, alignment=1, leading=11)
+    st_cell = ParagraphStyle("c", fontName="Helvetica", fontSize=9, alignment=1, leading=11)
+
+    total_l = sum(largeurs.get(n, 16) for n in d.columns) or 1
+    dispo = landscape(A4)[0] - 20 * mm
+    col_w = [dispo * largeurs.get(n, 16) / total_l for n in d.columns]
+
+    data = [[Paragraph(str(n), st_head) for n in d.columns]]
+    for ligne in d.itertuples(index=False):
+        data.append([
+            Paragraph("-" if v is None or str(v) == "" else str(v).replace("&", "&amp;").replace("<", "&lt;"), st_cell)
+            for v in ligne
+        ])
+    table = Table(data, colWidths=col_w, repeatRows=1)
+    table.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#D9E2F3")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+
+    def pied(canvas, _doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 8)
+        canvas.drawString(10 * mm, 7 * mm, "LPEE - CTR-CSB")
+        canvas.drawCentredString(landscape(A4)[0] / 2, 7 * mm, f"Page {canvas.getPageNumber()}")
+        canvas.drawRightString(landscape(A4)[0] - 10 * mm, 7 * mm, f"Imprimé le {date.today().strftime('%d/%m/%Y')}")
+        canvas.restoreState()
+
+    doc.build([Paragraph(titre, st_titre), Paragraph(sous_titre, st_sous), Spacer(1, 2), table],
+              onFirstPage=pied, onLaterPages=pied)
+    buf.seek(0)
+    return buf
+
+
 def obtenir_historique_betonnage(supabase, betonnage_id):
     if not betonnage_id: return []
     try:
@@ -1401,8 +1541,10 @@ def show(supabase):
                     "3-Nb d'éprouvettes": int(item.get("nb_eprouvettes") or 12),
                     "4-Classe de béton": item.get("classe_beton") or item.get("classe") or "-",
                     "5-Ouvrage": item.get("ouvrage") or "-",
-                    "6-Affaissement": f"{aff_val} mm" if str(aff_val) != "-" and "mm" not in str(aff_val) else str(aff_val),
-                    "7-Temperature de béton frais": f"{temp_val} °C" if str(temp_val) != "-" and "°C" not in str(temp_val) else str(temp_val),
+                    "6-Partie d'ouvrage": item.get("partie_ouvrage") or "-",
+                    "7-Affaissement": f"{aff_val} mm" if str(aff_val) != "-" and "mm" not in str(aff_val) else str(aff_val),
+                    "8-Temperature de béton frais": f"{temp_val} °C" if str(temp_val) != "-" and "°C" not in str(temp_val) else str(temp_val),
+                    "9-Technicien prélèvement": item.get("technicien") or item.get("saisi_par") or "-",
                 })
 
             df_edited = st.data_editor(
@@ -1414,8 +1556,10 @@ def show(supabase):
                     "3-Nb d'éprouvettes": st.column_config.NumberColumn("3-Nb d'éprouvettes", disabled=True),
                     "4-Classe de béton": st.column_config.TextColumn("4-Classe de béton", disabled=True),
                     "5-Ouvrage": st.column_config.TextColumn("5-Ouvrage", disabled=True),
-                    "6-Affaissement": st.column_config.TextColumn("6-Affaissement", disabled=True),
-                    "7-Temperature de béton frais": st.column_config.TextColumn("7-Température béton", disabled=True),
+                    "6-Partie d'ouvrage": st.column_config.TextColumn("6-Partie d'ouvrage", disabled=True),
+                    "7-Affaissement": st.column_config.TextColumn("7-Affaissement", disabled=True),
+                    "8-Temperature de béton frais": st.column_config.TextColumn("8-Température béton", disabled=True),
+                    "9-Technicien prélèvement": st.column_config.TextColumn("9-Technicien (prélèvement)", disabled=True),
                 },
                 use_container_width=True, hide_index=True, key="editor_reception_phase0",
             )
@@ -1454,12 +1598,21 @@ def show(supabase):
 
             with col_rec2:
                 df_visibles = df_edited[df_edited["1-Numero de reception"].str.strip().ne("") & df_edited["1-Numero de reception"].str.strip().ne("-")]
+                _titre_rec = f"LISTE DES RÉCEPTIONS DE BÉTON — {projets_config.nom_projet(projet_id_actif)}"
+                _sous_rec = f"Édité le {date.today().strftime('%d/%m/%Y')} — {len(df_visibles)} réception(s)"
                 st.download_button(
-                    label="📊 Télécharger la liste des réceptions en Excel",
-                    data=exporter_dataframe_excel(df_visibles.drop(columns=["_id_beton"]), "Phase_0"),
+                    label="📊 Liste des réceptions en Excel (A4 paysage)",
+                    data=exporter_receptions_excel_a4(df_visibles, _titre_rec, _sous_rec),
                     file_name=f"Reception_Beton_Phase_0_{date.today()}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True, key="btn_download_reception_excel",
+                )
+                st.download_button(
+                    label="📄 Liste des réceptions en PDF (A4 paysage)",
+                    data=exporter_receptions_pdf_a4(df_visibles, _titre_rec, _sous_rec),
+                    file_name=f"Reception_Beton_Phase_0_{date.today()}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True, key="btn_download_reception_pdf",
                 )
 
             # --- MODULE ÉTIQUETTES QR CODE ---
