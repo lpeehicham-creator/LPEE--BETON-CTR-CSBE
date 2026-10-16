@@ -1214,9 +1214,9 @@ def show(supabase):
       or role_norm in ["laboratoire", "coordinateur_essais", "responsable_dossier", "ingenieur_dossier", "chef_laboratoire", "labo", "qualite"]
   )
 
-  # Le technicien laboratoire télécharge le PV en PDF uniquement (pas en Excel).
-  est_technicien_labo = role_norm in ["laboratoire", "technicien", "labo"] and not is_admin
-  peut_excel = peut_telecharger and not est_technicien_labo
+  # PV en Excel : réservé à l'admin et aux responsables de chantier. Les personnes dont
+  # la modification dépend du droit `can_edit` téléchargent le PV en PDF uniquement.
+  peut_excel = peut_telecharger and (is_admin or est_resp_chantier)
 
   if (
       role not in ["laboratoire", "coordinateur_essais", "responsable_dossier", "ingenieur_dossier", "chef_laboratoire", "labo", "admin", "responsable_labo", "responsable_chantier", "qualite"]
@@ -1561,7 +1561,7 @@ def show(supabase):
           nom_fichier_pv_xlsx = f"PV_{nom_rec_clean}_{date_fab_clean}.xlsx"
           if peut_excel:
             col_pdf, col_xlsx = st.columns(2)
-          else:  # technicien laboratoire : PDF seulement, sur toute la largeur
+          else:  # PDF seulement, sur toute la largeur
             col_pdf, col_xlsx = st.container(), None
           try:
             col_pdf.download_button(
@@ -1575,7 +1575,7 @@ def show(supabase):
             )
           except Exception as e_pdf:
             col_pdf.error(f"❌ Génération du PDF impossible : {e_pdf}")
-          if col_xlsx is not None:  # bouton Excel : pas pour le technicien laboratoire
+          if col_xlsx is not None:  # bouton Excel : admin et responsables de chantier seulement
             try:
               col_xlsx.download_button(
                   label=f"📊 Télécharger le PV en Excel ({nom_fichier_pv_xlsx})",
