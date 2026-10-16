@@ -6,6 +6,45 @@ import projets_config
 import scan_bl
 
 # ==============================================================================
+# CLASSES DE BÉTON
+# ==============================================================================
+# Classes avec dosage / adjuvant, proposées en plus de la liste de base.
+CLASSES_BETON_SUPPLEMENTAIRES = [
+    "C20/25 TL250",
+    "C25/30 TL 350",
+    "C30/37 TL350 PM",
+    "C30/37 TL400 PM",
+    "C30/37 TL 375 PM",
+    "C35/45 TL 350 PM",
+    "C35/45 TL 400",
+    "C40/50 TL 400",
+    "C40/50 TL 400 PM",
+]
+
+
+def _cle_tri_classe(classe):
+    """Tri par résistance (C20, C25, …), puis par dosage TL (250, 350, 400…), puis PM."""
+    import re
+
+    c = str(classe).strip().upper()
+    nombre = int(c[1:3]) if c.startswith("C") and c[1:3].isdigit() else 999
+    m = re.search(r"TL\s*(\d+)", c)
+    dosage = int(m.group(1)) if m else 0
+    return (nombre, dosage, " PM" in f" {c}", c)
+
+
+def classes_beton_disponibles(base, courante=None):
+    """Liste de base + C20/25 + classes avec dosage, sans doublon, triée par résistance.
+    `courante` : classe déjà enregistrée sur une fiche (ajoutée si absente de la liste)."""
+    toutes = []
+    for c in list(base) + ["C20/25"] + CLASSES_BETON_SUPPLEMENTAIRES + ([courante] if courante else []):
+        c = str(c).strip()
+        if c and c not in toutes:
+            toutes.append(c)
+    return sorted(toutes, key=_cle_tri_classe)
+
+
+# ==============================================================================
 # TRAÇABILITÉ : qui a modifié quoi (lecture du journal d'audit)
 # ==============================================================================
 _TABLE_JOURNAL = "journal_modifications_iso17025"
@@ -294,19 +333,12 @@ def show(supabase):
         st.text_input("Durée de transport / attente (min)", value=f"{duree_minutes} min", disabled=True, key="saisie_duree")
         
         _classes_base = list(scan_bl.CLASSES_BETON)
-        _classes_saisie = list(_classes_base)
-        if "C20/25" not in _classes_saisie:
-            # Insertion avant la première classe plus résistante (ordre croissant).
-            _pos = next(
-                (i for i, c in enumerate(_classes_saisie)
-                 if str(c).upper().startswith("C") and str(c)[1:3].isdigit() and int(str(c)[1:3]) > 20),
-                len(_classes_saisie),
-            )
-            _classes_saisie.insert(_pos, "C20/25")
+        _classes_saisie = classes_beton_disponibles(_classes_base)
         classe_beton = st.selectbox(
             "Classe", 
             _classes_saisie,
-            index=_classes_saisie.index(_classes_base[0]) if _classes_base else 0,
+            # la classe proposée par défaut reste celle d'origine (1re de la liste de base)
+            index=_classes_saisie.index(str(_classes_base[0])) if _classes_base and str(_classes_base[0]) in _classes_saisie else 0,
             key="saisie_classe"
         )
         
@@ -561,9 +593,12 @@ def show(supabase):
                                 new_heure_fin = st.time_input("Heure de fin de production", value=def_h_fin, key=f"edit_h_fin_{rec_id}")
                                 new_heure_arrivee = st.time_input("Heure d'arrivée au chantier", value=def_h_arr, key=f"edit_h_arr_{rec_id}")
                             
-                                classes_list = ["C20/25", "C25/30", "C30/37", "C35/45", "C40/50", "C45/55"]
-                                current_classe = selected_item.get("classe_beton", "C25/30")
-                                idx_classe = classes_list.index(current_classe) if current_classe in classes_list else classes_list.index("C25/30")
+                                current_classe = selected_item.get("classe_beton") or "C25/30"
+                                # la classe déjà enregistrée est toujours proposée (elle ne change pas par erreur)
+                                classes_list = classes_beton_disponibles(
+                                    ["C25/30", "C30/37", "C35/45", "C40/50", "C45/55"], current_classe
+                                )
+                                idx_classe = classes_list.index(str(current_classe).strip())
                                 new_classe = st.selectbox("Classe", classes_list, index=idx_classe, key=f"edit_classe_{rec_id}")
                             
                                 new_centrale = st.text_input("Centrale à Béton", value=selected_item.get("centrale_beton", "TG PREFA"), key=f"edit_centrale_{rec_id}")
