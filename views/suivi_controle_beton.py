@@ -649,20 +649,23 @@ def exporter_dataframe_excel(df, date_chaine):
 
 # Colonnes du tableau des réceptions : (clé interne, intitulé imprimé, largeur Excel)
 _COLONNES_RECEPTION_IMPRESSION = [
-    ("1-Numero de reception", "N° Réception", 14),
-    ("2-Date de livraison", "Date de livraison", 16),
-    ("3-Nb d'éprouvettes", "Nb d'éprouvettes", 17),
+    ("1-Numero de reception", "N° Réception", 16),
+    ("2-Date de livraison", "Date de livraison", 15),
+    ("3-Nb d'éprouvettes", "Nb d'éprouvettes", 18),
     ("4-Classe de béton", "Classe de béton", 14),
-    ("5-Ouvrage", "Ouvrage", 26),
-    ("6-Partie d'ouvrage", "Partie d'ouvrage", 26),
-    ("7-Affaissement", "Affaissement", 17),
-    ("8-Temperature de béton frais", "Température béton", 16),
-    ("9-Technicien prélèvement", "Technicien (prélèvement)", 24),
+    ("5-Ouvrage", "Ouvrage", 22),
+    ("6-Partie d'ouvrage", "Partie d'ouvrage", 22),
+    ("7-Affaissement", "Affaissement", 18),
+    ("8-Temperature de béton frais", "Température béton", 18),
+    ("9-Technicien prélèvement", "Technicien (prélèvement)", 22),
+    ("10-Visa", "Visa (signature de l'essai)", 22),
 ]
+_NOM_COLONNE_VISA = "Visa (signature de l'essai)"
 
 
 def _df_reception_impression(df):
     """DataFrame des réceptions -> colonnes imprimables (intitulés propres)."""
+    df = df.assign(**{"10-Visa": ""})  # colonne vide : signature manuscrite à l'impression
     cles = [c for c, _, _ in _COLONNES_RECEPTION_IMPRESSION if c in df.columns]
     noms = {c: n for c, n, _ in _COLONNES_RECEPTION_IMPRESSION}
     return df[cles].rename(columns=noms)
@@ -705,11 +708,12 @@ def exporter_receptions_excel_a4(df, titre, sous_titre=""):
 
     for i, ligne in enumerate(d.itertuples(index=False), start=ligne_entete + 1):
         for j, val in enumerate(ligne, start=1):
-            c = ws.cell(row=i, column=j, value=("-" if val is None or str(val) == "" else val))
+            vide_ok = d.columns[j - 1] == _NOM_COLONNE_VISA  # la case Visa reste vide
+            c = ws.cell(row=i, column=j, value=("" if vide_ok else ("-" if val is None or str(val) == "" else val)))
             c.font = Font(size=10)
             c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
             c.border = bordure
-        ws.row_dimensions[i].height = 24
+        ws.row_dimensions[i].height = 34  # place pour signer
 
     derniere = ligne_entete + max(len(d), 1)
     # --- Mise en page : A4 paysage, 1 page de large, en-tête répété ---
@@ -761,10 +765,15 @@ def exporter_receptions_pdf_a4(df, titre, sous_titre=""):
     data = [[Paragraph(str(n), st_head) for n in d.columns]]
     for ligne in d.itertuples(index=False):
         data.append([
-            Paragraph("-" if v is None or str(v) == "" else str(v).replace("&", "&amp;").replace("<", "&lt;"), st_cell)
-            for v in ligne
+            Paragraph(
+                "" if d.columns[k] == _NOM_COLONNE_VISA
+                else ("-" if v is None or str(v) == "" else str(v).replace("&", "&amp;").replace("<", "&lt;")),
+                st_cell,
+            )
+            for k, v in enumerate(ligne)
         ])
-    table = Table(data, colWidths=col_w, repeatRows=1)
+    # lignes de 10 mm minimum : place pour la signature
+    table = Table(data, colWidths=col_w, repeatRows=1, rowHeights=[None] + [10 * mm] * (len(data) - 1))
     table.setStyle(TableStyle([
         ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#D9E2F3")),
