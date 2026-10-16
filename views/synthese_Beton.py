@@ -29,6 +29,15 @@ def _ouvrage_complet(ouvrage, partie):
   return o or p or None
 
 
+def _liste_centrales(lignes):
+  """Centrales à béton distinctes d'une liste de fiches (pour le filtre)."""
+  return sorted({
+      str(l.get("centrale_beton")).strip()
+      for l in lignes or []
+      if isinstance(l, dict) and str(l.get("centrale_beton") or "").strip()
+  })
+
+
 def _combiner_ouvrage_liste(lignes):
   """Remplace `ouvrage` par « Ouvrage - Partie d'ouvrage » dans une liste de fiches."""
   for ligne in lignes or []:
@@ -1318,6 +1327,7 @@ def load_and_process_controle_data(supabase):
             "date_livraison": "date_coulee_b",
             "ouvrage": "ouvrage_b",
             "partie_ouvrage": "partie_ouvrage_b",
+            "centrale_beton": "centrale_beton_b",
         }
     )
     # Jointure directe via betonnage_id (clé étrangère fiable), au lieu de
@@ -1325,7 +1335,7 @@ def load_and_process_controle_data(supabase):
     # ne jamais correspondre exactement — c'est ce qui laissait Réf.
     # Contrôle, Affaissement et Temp. Béton vides pour certaines lignes.
     if "betonnage_id" in df_raw.columns and "id" in df_betonnage.columns:
-      cols_a_joindre = [c for c in ["id", "ref_controle_b", "affaissement_mm_b", "temp_beton_C_b", "partie_ouvrage_b"] if c in df_betonnage.columns]
+      cols_a_joindre = [c for c in ["id", "ref_controle_b", "affaissement_mm_b", "temp_beton_C_b", "partie_ouvrage_b", "centrale_beton_b"] if c in df_betonnage.columns]
       df_raw = df_raw.merge(
           df_betonnage[cols_a_joindre],
           left_on="betonnage_id", right_on="id", how="left",
@@ -1411,6 +1421,17 @@ def load_and_process_controle_data(supabase):
       if temp_b_idx is not None:
         temp_val = group_df.loc[temp_b_idx, "temp_beton_C_b"]
 
+    # Centrale à béton (colonne technique « _centrale », servant au filtre uniquement)
+    centrale_val = None
+    for col_c in ["centrale_beton_b", "centrale", "centrale_beton"]:
+      if col_c in group_df.columns:
+        serie_c = group_df[col_c].dropna().astype(str).str.strip()
+        serie_c = serie_c[serie_c != ""]
+        if not serie_c.empty:
+          centrale_val = serie_c.iloc[0]
+          break
+    row_dict["_centrale"] = centrale_val
+
     row_dict["affaissement_mm"] = extract_numeric(aff_val)
     row_dict["temp_beton_C"] = extract_numeric(temp_val)
 
@@ -1442,6 +1463,7 @@ def load_and_process_controle_data(supabase):
       "fc_mpa_7 jours",
       "fc_mpa_28 jours",
       "date_dt",
+      "_centrale",
   ]
 
   existing_cols = [c for c in desired_order if c in df_pivoted.columns]
@@ -1467,6 +1489,8 @@ def format_controle_dataframe(df_filtered):
   df_display = df_filtered.copy()
   if "date_dt" in df_display.columns:
     df_display = df_display.drop(columns=["date_dt"])
+  if "_centrale" in df_display.columns:
+    df_display = df_display.drop(columns=["_centrale"])  # colonne technique du filtre
   return df_display
 
 
@@ -1587,6 +1611,10 @@ def show(supabase):
           selected_ouvrages = st.multiselect(
               "Filtrer par ouvrage :", ouvrages_j, default=ouvrages_j, key="b_ouv_j"
           )
+        centrales_j = _liste_centrales(data)
+        selected_centrales_j = st.multiselect(
+            "Filtrer par centrale à béton :", centrales_j, default=centrales_j, key="b_cen_j"
+        )
 
         if data:
           df = pd.DataFrame(data)
@@ -1594,6 +1622,8 @@ def show(supabase):
             df = df[df["classe_beton"] == selected_class]
           if selected_ouvrages and len(selected_ouvrages) < len(ouvrages_j):
             df = df[df["ouvrage"].isin(selected_ouvrages)]
+          if selected_centrales_j and len(selected_centrales_j) < len(centrales_j) and "centrale_beton" in df.columns:
+            df = df[df["centrale_beton"].astype(str).str.strip().isin(selected_centrales_j)]
 
           if df.empty:
             st.info("Aucun coulage enregistré pour les critères sélectionnés.")
@@ -1750,6 +1780,10 @@ def show(supabase):
           selected_ouvrages_m = st.multiselect(
               "Filtrer par ouvrage :", ouvrages_m, default=ouvrages_m, key="b_ouv_m"
           )
+        centrales_m = _liste_centrales(data_m)
+        selected_centrales_m = st.multiselect(
+            "Filtrer par centrale à béton :", centrales_m, default=centrales_m, key="b_cen_m"
+        )
 
         if data_m:
           df_m = pd.DataFrame(data_m)
@@ -1757,6 +1791,8 @@ def show(supabase):
             df_m = df_m[df_m["classe_beton"] == selected_class_m]
           if selected_ouvrages_m and len(selected_ouvrages_m) < len(ouvrages_m):
             df_m = df_m[df_m["ouvrage"].isin(selected_ouvrages_m)]
+          if selected_centrales_m and len(selected_centrales_m) < len(centrales_m) and "centrale_beton" in df_m.columns:
+            df_m = df_m[df_m["centrale_beton"].astype(str).str.strip().isin(selected_centrales_m)]
 
           if df_m.empty:
             st.info("Aucun coulage enregistré pour ces critères.")
@@ -1874,6 +1910,9 @@ def show(supabase):
         )
       if "Ouvrage" in df_merged.columns:
         ouvrages_dispo = sorted(list(df_merged["Ouvrage"].dropna().unique()))
+    centrales_dispo = []
+    if not df_merged.empty and "_centrale" in df_merged.columns:
+      centrales_dispo = sorted(list(df_merged["_centrale"].dropna().unique()))
 
     with tab_j_c:
       st.markdown("### Filtrage journalier par classe et ouvrage")
@@ -1890,6 +1929,9 @@ def show(supabase):
         selected_ouvrages_cj = st.multiselect(
             "Filtrer par ouvrage :", ouvrages_dispo, default=ouvrages_dispo, key="c_ouv_j"
         )
+      selected_centrales_cj = st.multiselect(
+          "Filtrer par centrale à béton :", centrales_dispo, default=centrales_dispo, key="c_cen_j"
+      )
 
       if df_merged.empty:
         st.info("Aucune donnée disponible.")
@@ -1906,6 +1948,12 @@ def show(supabase):
             and "Ouvrage" in df_j_c.columns
         ):
           df_j_c = df_j_c[df_j_c["Ouvrage"].isin(selected_ouvrages_cj)]
+        if (
+            selected_centrales_cj
+            and len(selected_centrales_cj) < len(centrales_dispo)
+            and "_centrale" in df_j_c.columns
+        ):
+          df_j_c = df_j_c[df_j_c["_centrale"].isin(selected_centrales_cj)]
 
         if df_j_c.empty:
           st.info("Aucun contrôle enregistré pour les critères sélectionnés.")
@@ -1971,6 +2019,9 @@ def show(supabase):
         selected_ouvrages_cm = st.multiselect(
             "Filtrer par ouvrage :", ouvrages_dispo, default=ouvrages_dispo, key="c_ouv_m"
         )
+      selected_centrales_cm = st.multiselect(
+          "Filtrer par centrale à béton :", centrales_dispo, default=centrales_dispo, key="c_cen_m"
+      )
 
       if df_merged.empty:
         st.info("Aucune donnée disponible.")
@@ -1990,6 +2041,12 @@ def show(supabase):
             and "Ouvrage" in df_m_c.columns
         ):
           df_m_c = df_m_c[df_m_c["Ouvrage"].isin(selected_ouvrages_cm)]
+        if (
+            selected_centrales_cm
+            and len(selected_centrales_cm) < len(centrales_dispo)
+            and "_centrale" in df_m_c.columns
+        ):
+          df_m_c = df_m_c[df_m_c["_centrale"].isin(selected_centrales_cm)]
 
         if df_m_c.empty:
           st.info("Aucun contrôle enregistré pour ces critères.")
