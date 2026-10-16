@@ -438,7 +438,7 @@ def generer_pv_excel(export_data, infos_header):
   if str(infos_header.get("commentaire_pv") or "").strip().upper() == "AUCUN":
     comment_valeur = ""  # PV sans commentaire (choix de l'utilisateur)
   elif not a_des_28j or est_en_cours_28j or moyenne_28j_val is None:
-    comment_valeur = "LES PERFORMANCES MÉCANIQUES À 28 JOURS SERONT COMMUNIQUÉES ULTÉRIEUREMENT.."
+    comment_valeur = "LES PERFORMANCES MÉCANIQUES À 28 JOURS SERONT COMMUNIQUÉES ULTÉRIEUREMENT."
   elif moyenne_28j_val >= seuil:  # commentaire automatique selon les résultats
     comment_valeur = TEXTE_CONFORME_28J
   else:
