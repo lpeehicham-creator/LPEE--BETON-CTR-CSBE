@@ -750,7 +750,7 @@ def generer_programme_pdf(eprouvettes, num_reception, dossier="-", client="-",
         date_txt = str(date_etabli or date.today().strftime("%d/%m/%Y"))
     bloc_visa = Table(
         [[[Paragraph("Le chef du laboratoire/Responsable de dossier", st_pet), Spacer(1, 4 * mm),
-           Paragraph("Visa", st_pet), Spacer(1, 16 * mm), Paragraph("Date", st_pet)]],
+           Paragraph("Visa", st_pet), Spacer(1, 18 * mm)]],
          [Paragraph(f"Programme établi le {esc(date_txt)}", st_pet)]],
         colWidths=[largeur], rowHeights=[42 * mm, 14 * mm],
     )
