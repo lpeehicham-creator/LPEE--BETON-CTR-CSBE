@@ -1315,6 +1315,10 @@ def show(supabase):
         or role_autorise_validation(role_user)
     )
 
+    # Le N° de réception ne se modifie pas avec le seul droit `can_edit` :
+    # admin et responsables de chantier uniquement.
+    peut_modifier_n_rec = role_autorise_validation(role_user)
+
     current_username = str(
         st.session_state.get("username")
         or user_info.get("username")
@@ -1380,7 +1384,7 @@ def show(supabase):
     # =========================================================
     if onglet_courant == OPTIONS_ONGLETS[0]:
         st.subheader("📋 0. Réception & Validation des Bétons")
-        st.info("💡 Le **N° Réception** est attribué automatiquement à chaque bétonnage avec prélèvement (suite numérique à partir du N° de démarrage défini dans le chantier). Vous pouvez le corriger ou le saisir ici pour les anciennes fiches. Une fois renseigné, il débloque la Phase 1 et permet la génération d'étiquettes **QR Code** étanches.")
+        st.info("💡 Le **N° Réception** est attribué automatiquement à chaque bétonnage avec prélèvement (suite numérique à partir du N° de démarrage défini dans le chantier). Seuls l'administrateur et les responsables de chantier peuvent le corriger ou le saisir ici pour les anciennes fiches. Une fois renseigné, il débloque la Phase 1 et permet la génération d'étiquettes **QR Code** étanches.")
 
         if not betonnages_preleves:
             st.info("ℹ️ Aucun bétonnage prélevé dans la base de données.")
@@ -1405,7 +1409,7 @@ def show(supabase):
                 pd.DataFrame(rows_reception),
                 column_config={
                     "_id_beton": None,
-                    "1-Numero de reception": st.column_config.TextColumn("1-N° Réception", help="Saisissez le N° de Réception ici", required=False),
+                    "1-Numero de reception": st.column_config.TextColumn("1-N° Réception", help="Saisissez le N° de Réception ici" if peut_modifier_n_rec else "Modifiable par l'administrateur et les responsables de chantier", required=False, disabled=not peut_modifier_n_rec),
                     "2-Date de livraison": st.column_config.TextColumn("2-Date de livraison", disabled=True),
                     "3-Nb d'éprouvettes": st.column_config.NumberColumn("3-Nb d'éprouvettes", disabled=True),
                     "4-Classe de béton": st.column_config.TextColumn("4-Classe de béton", disabled=True),
@@ -1418,7 +1422,7 @@ def show(supabase):
 
             col_rec1, col_rec2 = st.columns(2)
             with col_rec1:
-                if st.button("💾 Enregistrer les N° de Réception", type="primary", use_container_width=True):
+                if st.button("💾 Enregistrer les N° de Réception", type="primary", use_container_width=True, disabled=not peut_modifier_n_rec):
                     succes_rec, bloque_doublon, nouveaux_numeros = 0, False, {}
                     for _, row in df_edited.iterrows():
                         b_id, n_rec = int(row["_id_beton"]), str(row["1-Numero de reception"]).strip()
