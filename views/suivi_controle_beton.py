@@ -647,6 +647,238 @@ def exporter_dataframe_excel(df, date_chaine):
     return buffer
 
 
+# =========================================================
+# PROGRAMME D'ESSAIS BÉTONS (PDF A4 portrait, à signer)
+# =========================================================
+def _logo_lpee_chemin():
+    """Chemin du logo LPEE (à côté de app.py), ou None."""
+    import os
+
+    ici = os.path.dirname(os.path.abspath(__file__))
+    for dossier in [os.getcwd(), ici, os.path.dirname(ici)]:
+        for nom in ["logo.png.jpg", "logo.png", "logo.jpg", "logo.jpeg"]:
+            chemin = os.path.join(dossier, nom)
+            if os.path.isfile(chemin):
+                return chemin
+    return None
+
+
+def _numero_eprouvette(repere):
+    """Repère « 56/4 » ou « /4 » -> 4 (entier) ; sinon le texte tel quel."""
+    m = re.search(r"(\d+)\s*$", str(repere or ""))
+    return int(m.group(1)) if m else str(repere or "-")
+
+
+def _colonnes_programme(eprouvettes):
+    """Regroupe les éprouvettes d'un programme par (âge, type d'essai).
+    Retourne une liste triée de (nb_jours, est_fendage, [numéros])."""
+    groupes = {}
+    for ep in eprouvettes:
+        jours = extraire_nb_jours(ep.get("echeance"), default=28)
+        type_txt = str(ep.get("type_essai") or "").lower()
+        fendage = ("fendage" in type_txt) or ("traction" in type_txt)
+        groupes.setdefault((jours, fendage), []).append(_numero_eprouvette(ep.get("repere_eprouvette")))
+    colonnes = []
+    for (jours, fendage), nums in sorted(groupes.items()):
+        nums = sorted(nums, key=lambda n: (isinstance(n, str), n))
+        colonnes.append((jours, fendage, nums))
+    return colonnes
+
+
+def generer_programme_pdf(eprouvettes, num_reception, dossier="-", client="-",
+                          prefixe_re="", date_etabli=None):
+    """Programme d'essais bétons (modèle LPEE) en PDF A4 portrait, à signer.
+    `eprouvettes` : éprouvettes programmées d'une même réception."""
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Image as RLImage
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    def esc(t):
+        return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    st_c = ParagraphStyle("c", fontName="Helvetica", fontSize=9, leading=11, alignment=TA_CENTER)
+    st_cb = ParagraphStyle("cb", parent=st_c, fontName="Helvetica-Bold")
+    st_l = ParagraphStyle("l", fontName="Helvetica", fontSize=9, leading=12)
+    st_lb = ParagraphStyle("lb", parent=st_l, fontName="Helvetica-Bold")
+    st_titre = ParagraphStyle("t", fontName="Helvetica-Bold", fontSize=14, leading=17, alignment=TA_CENTER)
+    st_pet = ParagraphStyle("p", fontName="Helvetica", fontSize=8, leading=10, alignment=TA_CENTER)
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
+        topMargin=15 * mm, bottomMargin=15 * mm, title=f"Programme d'essais bétons - {num_reception}",
+    )
+    largeur = A4[0] - 30 * mm
+    noir = colors.black
+    story = []
+
+    # --- En-tête : logo | titre | RE N° ---
+    cellule_logo = [Paragraph("<b>LPEE / CTR CSB</b>", ParagraphStyle("lg", fontName="Helvetica-Bold", fontSize=8, leading=10))]
+    logo = _logo_lpee_chemin()
+    if logo:
+        try:
+            from reportlab.lib.utils import ImageReader
+
+            iw, ih = ImageReader(logo).getSize()
+            h_logo = 13 * mm
+            w_logo = min(h_logo * iw / ih, 30 * mm)
+            cellule_logo = [RLImage(logo, width=w_logo, height=w_logo * ih / iw), Spacer(1, 2)] + cellule_logo
+        except Exception:
+            pass
+    re_txt = f"{prefixe_re}{num_reception}" if prefixe_re and prefixe_re != "-" else str(num_reception)
+    entete = Table(
+        [[cellule_logo, Paragraph("PROGRAMME D'ESSAIS<br/>BETONS", st_titre),
+          Paragraph(f"<b>RE N° : {esc(re_txt)}</b>", ParagraphStyle("re", parent=st_l, fontSize=8.5))]],
+        colWidths=[36 * mm, largeur - 90 * mm, 54 * mm], rowHeights=[28 * mm],
+    )
+    entete.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.8, noir), ("INNERGRID", (0, 0), (-1, -1), 0.8, noir),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story += [entete, Spacer(1, 10 * mm)]
+    story += [Paragraph(f"<b>DOSSIER : {esc(dossier)}</b>", st_l), Spacer(1, 3 * mm),
+              Paragraph(f"<b>CLIENT : {esc(client)}</b>", st_l), Spacer(1, 2 * mm)]
+
+    # --- Bloc visa + date d'établissement ---
+    if isinstance(date_etabli, (date, datetime)):
+        date_txt = date_etabli.strftime("%d/%m/%Y")
+    else:
+        date_txt = str(date_etabli or date.today().strftime("%d/%m/%Y"))
+    bloc_visa = Table(
+        [[[Paragraph("Le chef du laboratoire/Responsable de dossier", st_pet), Spacer(1, 4 * mm),
+           Paragraph("Visa", st_pet), Spacer(1, 16 * mm), Paragraph("Date", st_pet)]],
+         [Paragraph(f"Programme établi le {esc(date_txt)}", st_pet)]],
+        colWidths=[largeur], rowHeights=[42 * mm, 14 * mm],
+    )
+    bloc_visa.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.8, noir), ("INNERGRID", (0, 0), (-1, -1), 0.8, noir),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    story += [bloc_visa, Spacer(1, 3 * mm)]
+
+    bande = Table([[Paragraph("<b>Essais sur bétons</b>", st_c)]], colWidths=[largeur], rowHeights=[7 * mm])
+    bande.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.8, noir), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+    story += [bande, Spacer(1, 2 * mm)]
+
+    # --- Tableau des essais ---
+    colonnes = _colonnes_programme(eprouvettes) or [(28, False, [])]
+    n = len(colonnes)
+    w_libelle, w_age = 0.32 * largeur, 0.18 * largeur
+    w_col = (largeur - w_libelle - w_age) / n
+    col_widths = [w_libelle, w_age] + [w_col] * n
+
+    ligne_age = ["", Paragraph("Age", st_c)] + [Paragraph(f"{j} jours", st_c) for j, _, _ in colonnes]
+    ligne_rec = ["", Paragraph("N° réception", st_c), Paragraph(f"<b>{esc(num_reception)}</b>", st_c)] + [""] * (n - 1)
+    ligne_num = ["", ""] + [Paragraph("/".join(str(x) for x in nums) or "-", st_c) for _, _, nums in colonnes]
+    lib_compression = Paragraph(
+        "<b><i>Essai pour béton durci</i></b> - <i>Résistance à la compression des éprouvettes</i>"
+        "<br/><br/><b>NF EN 12390-3 (2019)</b>", st_c)
+    lib_fendage = Paragraph(
+        "<b><i>Essai pour béton durci</i></b> - <i>Résistance à la TRACTION PAR FENDAGE des éprouvettes</i>"
+        "<br/><br/><b>NF EN 12390-6 (2019)</b>", st_c)
+    ligne_comp = [lib_compression, ""] + [Paragraph("X" if not f else "", st_c) for _, f, _ in colonnes]
+    ligne_fend = [lib_fendage, ""] + [Paragraph("X" if f else "", st_c) for _, f, _ in colonnes]
+    ligne_age[0] = Paragraph("Libellé de l'essai", st_c)
+
+    tableau = Table(
+        [ligne_age, ligne_rec, ligne_num, ligne_comp, ligne_fend],
+        colWidths=col_widths, rowHeights=[9 * mm, 9 * mm, 9 * mm, 26 * mm, 26 * mm],
+    )
+    styles = [
+        ("GRID", (0, 0), (-1, -1), 0.8, noir),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("SPAN", (0, 0), (0, 2)),            # « Libellé de l'essai » sur les 3 lignes d'en-tête
+        ("SPAN", (1, 1), (1, 2)),            # « N° réception » sur 2 lignes
+        ("SPAN", (2, 1), (-1, 1)),           # N° de réception sur toutes les colonnes d'âge
+        ("SPAN", (0, 3), (1, 3)),
+        ("SPAN", (0, 4), (1, 4)),
+        ("LEFTPADDING", (0, 3), (1, 4), 5), ("RIGHTPADDING", (0, 3), (1, 4), 5),
+    ]
+    tableau.setStyle(TableStyle(styles))
+    story.append(tableau)
+
+    doc.build(story)
+    buf.seek(0)
+    return buf
+
+
+def afficher_programmes_pdf(supabase, projet_id, map_betonnages):
+    """Section Phase 1 : télécharge, pour chaque programme établi, le PDF à signer."""
+    st.markdown("---")
+    st.subheader("📄 Programmes établis — PDF à signer")
+    try:
+        res = supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id).execute()
+        eprouvettes = res.data or []
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des programmes : {e}")
+        return
+
+    programmes = {}
+    for ep in eprouvettes:
+        if ep.get("betonnage_id"):
+            programmes.setdefault(ep["betonnage_id"], []).append(ep)
+    if not programmes:
+        st.info("Aucun programme établi pour le moment.")
+        return
+
+    def _num_rec(bid):
+        b = map_betonnages.get(bid) or {}
+        return str(
+            b.get("num_reception") or b.get("n_reception")
+            or (programmes[bid][0].get("ref_controle") or "-")
+        ).strip()
+
+    def _date_coulee(bid):
+        b = map_betonnages.get(bid)
+        return extraire_date_coulee(b) if b else str(programmes[bid][0].get("date_coulee") or "-")[:10]
+
+    ordre = sorted(programmes, key=lambda bid: (_date_coulee(bid), str(bid)), reverse=True)
+    libelles = {}
+    for bid in ordre:
+        eps = programmes[bid]
+        b = map_betonnages.get(bid) or {}
+        classe = b.get("classe_beton") or eps[0].get("classe_beton") or "-"
+        ouvrage = b.get("ouvrage") or eps[0].get("ouvrage") or "-"
+        libelles[
+            f"N° Réception {_num_rec(bid)} | Coulée : {_date_coulee(bid)} | Classe : {classe}"
+            f" | Ouvrage : {ouvrage} | {len(eps)} éprouvette(s)"
+        ] = bid
+
+    choix = st.selectbox("Choisir le programme :", list(libelles.keys()), key="prog_pdf_select")
+    bid = libelles[choix]
+    eps = programmes[bid]
+
+    dates = []
+    for ep in eps:
+        try:
+            dates.append(datetime.fromisoformat(str(ep.get("created_at"))[:19]).date())
+        except Exception:
+            pass
+    try:
+        prefixe = projets_config.ref_pv("25/260/LGV/ B/")
+    except Exception:
+        prefixe = ""
+    num = _num_rec(bid)
+    st.download_button(
+        label=f"📄 Télécharger le programme N° {num} en PDF (A4 portrait, à signer)",
+        data=generer_programme_pdf(
+            eps, num,
+            dossier=projets_config.dossier_pv("2025-260-05985-2025-0247"),
+            client=projets_config.client_projet(),
+            prefixe_re=prefixe,
+            date_etabli=min(dates) if dates else date.today(),
+        ),
+        file_name=f"Programme_Essais_Betons_{re.sub(r'[^A-Za-z0-9_-]+', '_', num)}.pdf",
+        mime="application/pdf",
+        use_container_width=True,
+        key=f"btn_programme_pdf_{bid}",
+    )
+
+
 # Colonnes du tableau des réceptions : (clé interne, intitulé imprimé, largeur Excel)
 _COLONNES_RECEPTION_IMPRESSION = [
     ("1-Numero de reception", "N° Réception", 16),
@@ -2324,6 +2556,9 @@ def show(supabase):
                     if succes_cnt > 0:
                         st.success(f"✅ {succes_cnt} éprouvette(s) programmée(s) pour le {date_ecrasement_prevue} ({echeance_p}) !")
                         st.rerun()
+
+        # --- Programmes établis : PDF à signer (un par réception) ---
+        afficher_programmes_pdf(supabase, projet_id_actif, map_betonnages)
 
     # =========================================================
     # PHASE 2 : PLANNING & SAISIE DES ÉCRASEMENTS
