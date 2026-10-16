@@ -11,7 +11,7 @@ import scan_bl
 _TABLE_JOURNAL = "journal_modifications_iso17025"
 
 _LIBELLES_CHAMPS = {
-    "date_livraison": "Date de livraison", "bl_num": "N° BL", "ouvrage": "Ouvrage",
+    "date_livraison": "Date de livraison", "bl_num": "N° BL", "ouvrage": "Ouvrage", "partie_ouvrage": "Partie d'ouvrage",
     "quantite_m3": "Quantité (m³)", "client": "Client", "classe_beton": "Classe de béton",
     "centrale_beton": "Centrale", "meteo": "Météo", "heure_fin_coulage": "Heure fin coulage",
     "heure_arrivee": "Heure d'arrivée", "temperature": "Température béton",
@@ -271,7 +271,8 @@ def show(supabase):
     with col1:
         technicien = st.text_input("Nom du Technicien LPEE", value="Agent LPEE", key="saisie_tech")
         bl_num = st.text_input("N° BL", value="BL-2026-001", key="saisie_bl")
-        ouvrage = st.text_input("Ouvrage", value="Voile / Semelle", key="saisie_ouvrage")
+        ouvrage = st.text_input("Ouvrage", value="", placeholder="ex : Pont Oued Bouregreg", key="saisie_ouvrage")
+        partie_ouvrage = st.text_input("Partie d'ouvrage", value="Voile / Semelle", key="saisie_partie_ouvrage")
         quantite_m3 = st.number_input("Quantité (m³)", min_value=0.0, value=8.0, step=0.5, key="saisie_qte")
         
     with col2:
@@ -352,6 +353,7 @@ def show(supabase):
                     "date_livraison": str(date_livraison),
                     "bl_num": bl_clean,
                     "ouvrage": ouvrage,
+                    "partie_ouvrage": partie_ouvrage,
                     "quantite_m3": float(quantite_m3),
                     "client": client,
                     "classe_beton": classe_beton,
@@ -401,6 +403,8 @@ def show(supabase):
                             "les secrets Streamlit avec la même valeur que la "
                             "politique RLS de suivi_betonnage."
                         )
+                    elif "partie_ouvrage" in str(e):
+                        st.error("Colonne manquante : exécutez ajout_partie_ouvrage.sql dans Supabase.")
                     else:
                         st.error(f"Erreur d'enregistrement : {e}")
 
@@ -460,6 +464,7 @@ def show(supabase):
                 "heure_arrivee": "Heure d'arrivée",
                 "bl_num": "N° BL",
                 "ouvrage": "Ouvrage",
+                "partie_ouvrage": "Partie d'ouvrage",
                 "quantite_m3": "Quantité (m³)",
                 "classe_beton": "Classe",
                 "temperature": "Temp. Béton",
@@ -480,6 +485,9 @@ def show(supabase):
             if "👤 Saisi par" in remaining_cols and "Technicien" in remaining_cols:
                 remaining_cols.remove("👤 Saisi par")
                 remaining_cols.insert(remaining_cols.index("Technicien") + 1, "👤 Saisi par")
+            if "Partie d'ouvrage" in remaining_cols and "Ouvrage" in remaining_cols:
+                remaining_cols.remove("Partie d'ouvrage")
+                remaining_cols.insert(remaining_cols.index("Ouvrage") + 1, "Partie d'ouvrage")
             final_cols = [c for c in desired_first_cols if c in df.columns] + remaining_cols
             df = df[final_cols]
 
@@ -508,7 +516,7 @@ def show(supabase):
                 st.markdown("---")
                 st.subheader("🛠️ Espace Administration - Suivi Béton")
                 
-                record_options = {f"ID {r['id']} - BL: {r.get('bl_num', 'N/A')} - Ouvrage: {r.get('ouvrage', '')}": r for r in res.data}
+                record_options = {f"ID {r['id']} - BL: {r.get('bl_num', 'N/A')} - Ouvrage: {r.get('ouvrage', '')}{(' — ' + r['partie_ouvrage']) if r.get('partie_ouvrage') else ''}": r for r in res.data}
                 selected_key = st.selectbox("Sélectionner l'enregistrement à gérer", list(record_options.keys()), key="admin_select_record")
                 selected_item = record_options[selected_key]
                 rec_id = selected_item["id"]
@@ -547,6 +555,7 @@ def show(supabase):
                                 new_technicien = st.text_input("Nom du Technicien LPEE", value=selected_item.get("technicien", "Agent LPEE"), key=f"edit_tech_{rec_id}")
                                 new_bl = st.text_input("N° BL", value=selected_item.get("bl_num", ""), key=f"edit_bl_{rec_id}")
                                 new_ouvrage = st.text_input("Ouvrage", value=selected_item.get("ouvrage", ""), key=f"edit_ouvrage_{rec_id}")
+                                new_partie_ouvrage = st.text_input("Partie d'ouvrage", value=selected_item.get("partie_ouvrage") or "", key=f"edit_partie_ouvrage_{rec_id}")
                                 new_quantite = st.number_input("Quantité (m³)", value=float(selected_item.get("quantite_m3", 0.0)), key=f"edit_qte_{rec_id}")
                             
                                 new_heure_fin = st.time_input("Heure de fin de production", value=def_h_fin, key=f"edit_h_fin_{rec_id}")
@@ -592,6 +601,7 @@ def show(supabase):
                                                 "technicien": new_technicien,
                                                 "bl_num": new_bl_clean,
                                                 "ouvrage": new_ouvrage,
+                                                "partie_ouvrage": new_partie_ouvrage,
                                                 "quantite_m3": float(new_quantite),
                                                 "heure_fin_coulage": new_heure_fin.strftime("%H:%M"),
                                                 "heure_arrivee": new_heure_arrivee.strftime("%H:%M"),
