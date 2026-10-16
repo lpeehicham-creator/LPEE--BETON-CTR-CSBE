@@ -1456,6 +1456,9 @@ def show(supabase):
 
         num_bl_h = extraire_num_bl(sample_h, info_b_h, choix_pv)
         ouv_h = info_b_h.get("ouvrage") or sample_h.get("ouvrage")
+        partie_h = str(info_b_h.get("partie_ouvrage") or "").strip()
+        # Lieu de prélèvement du PV = Ouvrage + Partie d'ouvrage
+        lieu_h = " - ".join(x for x in [str(ouv_h or "").strip(), partie_h] if x) or ouv_h
         ref_ctrl_h = determiner_ref_controle(
             supabase, b_id_h, info_b_h, sample_h
         )
@@ -1475,7 +1478,7 @@ def show(supabase):
             "ref_controle": ref_ctrl_h,
             "num_bl": num_bl_h,
             "ouvrage": ouv_h,
-            "lieu_prelevement": ouv_h,
+            "lieu_prelevement": lieu_h,
             "classe_beton": sample_h.get("classe_beton", "C35/45"),
             "date_coulee": date_coulee_h,
             "affaissement": (
