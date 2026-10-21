@@ -1142,14 +1142,19 @@ def obtenir_infos_betonnage_parents_bulk(supabase, betonnage_ids):
   if not ids_valides:
     return {}
   try:
-    res = (
-        projets_config.filtrer_projet_actif(
-            supabase.table("suivi_betonnage")
-            .select("*")
-            .in_("id", ids_valides)
-        ).execute()
-    )
-    return {p["id"]: p for p in (res.data or [])}
+    parents = {}
+    for i in range(0, len(ids_valides), 200):
+      lot = ids_valides[i:i + 200]
+      lignes = projets_config.fetch_all(
+          projets_config.filtrer_projet_actif(
+              supabase.table("suivi_betonnage")
+              .select("*")
+              .in_("id", lot)
+          ).order("id")
+      )
+      for p in lignes:
+        parents[p["id"]] = p
+    return parents
   except Exception as e:
     st.warning(f"Note : chargement groupé des fiches parentes impossible ({e}).")
     return {}
@@ -1242,18 +1247,17 @@ def show(supabase):
   st.caption(f"📁 Projet actif : **{projets_config.nom_projet(projet_id_actif)}**")
 
   try:
-    res_all = (
+    data_all = projets_config.fetch_all(
         supabase.table("suivi_controle_beton")
         .select("*")
         .eq("projet_id", projet_id_actif)
         .order("id", desc=True)
-        .execute()
     )
-    if not res_all.data:
+    if not data_all:
       st.info("ℹ️ Aucun historique disponible dans la base de données.")
       return
 
-    df_all = pd.DataFrame(res_all.data)
+    df_all = pd.DataFrame(data_all)
 
     unique_b_ids = [
         b_id for b_id in df_all["betonnage_id"].unique() if pd.notnull(b_id)
