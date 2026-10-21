@@ -447,9 +447,11 @@ def show(supabase):
     st.subheader("📊 Historique")
     
     try:
-        res = supabase.table("suivi_betonnage").select("*").eq("projet_id", projet_id_actif).order("id", desc=True).execute()
-        if res.data:
-            df = pd.DataFrame(res.data)
+        data_hist = projets_config.fetch_all(
+            supabase.table("suivi_betonnage").select("*").eq("projet_id", projet_id_actif).order("id", desc=True)
+        )
+        if data_hist:
+            df = pd.DataFrame(data_hist)
             
             # Nettoyage d'affichage de la colonne "prelevement" et mise à zéro systématique si NON
             if "prelevement" in df.columns:
@@ -548,7 +550,7 @@ def show(supabase):
                 st.markdown("---")
                 st.subheader("🛠️ Espace Administration - Suivi Béton")
                 
-                record_options = {f"ID {r['id']} - BL: {r.get('bl_num', 'N/A')} - Ouvrage: {r.get('ouvrage', '')}{(' — ' + r['partie_ouvrage']) if r.get('partie_ouvrage') else ''}": r for r in res.data}
+                record_options = {f"ID {r['id']} - BL: {r.get('bl_num', 'N/A')} - Ouvrage: {r.get('ouvrage', '')}{(' — ' + r['partie_ouvrage']) if r.get('partie_ouvrage') else ''}": r for r in data_hist}
                 selected_key = st.selectbox("Sélectionner l'enregistrement à gérer", list(record_options.keys()), key="admin_select_record")
                 selected_item = record_options[selected_key]
                 rec_id = selected_item["id"]
@@ -700,8 +702,8 @@ def show(supabase):
                 if is_baallal_admin:
                     afficher_historique_modifications(supabase, "suivi_betonnage", rec_id)
                 else:
-                    afficher_tracabilite(supabase, res.data, rec_id=rec_id)
-                afficher_tracabilite(supabase, res.data)
+                    afficher_tracabilite(supabase, data_hist, rec_id=rec_id)
+                afficher_tracabilite(supabase, data_hist)
 
         else:
             st.info("Aucune donnée enregistrée pour le moment.")
