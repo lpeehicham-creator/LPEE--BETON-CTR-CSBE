@@ -1279,28 +1279,21 @@ def generate_excel_synthesis_controle(df_data, titre_periode, is_mensuel=False):
 
 def load_and_process_controle_data(supabase):
   projet_id_actif = projets_config.projet_actif(st.session_state.get("user") or {})
-  res_ecrasement = (
+  data_ecrasement = projets_config.fetch_all(
       supabase.table("suivi_controle_beton")
       .select("*")
       .eq("projet_id", projet_id_actif)
       .order("id", desc=True)
-      .execute()
   )
-  df_raw = (
-      pd.DataFrame(res_ecrasement.data)
-      if res_ecrasement and res_ecrasement.data
-      else pd.DataFrame()
-  )
+  df_raw = pd.DataFrame(data_ecrasement) if data_ecrasement else pd.DataFrame()
 
   if df_raw.empty:
     return pd.DataFrame()
 
-  res_betonnage = supabase.table("suivi_betonnage").select("*").eq("projet_id", projet_id_actif).execute()
-  df_betonnage = (
-      pd.DataFrame(res_betonnage.data)
-      if res_betonnage and res_betonnage.data
-      else pd.DataFrame()
+  data_betonnage = projets_config.fetch_all(
+      supabase.table("suivi_betonnage").select("*").eq("projet_id", projet_id_actif).order("id")
   )
+  df_betonnage = pd.DataFrame(data_betonnage) if data_betonnage else pd.DataFrame()
 
   col_mapping_input = {
       "affaissement": "affaissement_mm",
@@ -1583,14 +1576,14 @@ def show(supabase):
         )
 
       try:
-        res = (
+        res_data = projets_config.fetch_all(
             supabase.table("suivi_betonnage")
             .select("*")
             .eq("projet_id", projet_id_actif)
             .eq("date_livraison", str(selected_date))
-            .execute()
+            .order("id")
         )
-        data = _combiner_ouvrage_liste(res.data if res else [])
+        data = _combiner_ouvrage_liste(res_data)
 
         classes_j = ["Toutes"]
         ouvrages_j = []
@@ -1751,15 +1744,15 @@ def show(supabase):
         )
         date_fin = f"{annee}-{mois_num:02d}-{dernier_jour}"
 
-        res_m = (
+        res_m_data = projets_config.fetch_all(
             supabase.table("suivi_betonnage")
             .select("*")
             .eq("projet_id", projet_id_actif)
             .gte("date_livraison", date_debut)
             .lte("date_livraison", date_fin)
-            .execute()
+            .order("id")
         )
-        data_m = _combiner_ouvrage_liste(res_m.data if res_m else [])
+        data_m = _combiner_ouvrage_liste(res_m_data)
 
         classes_m = ["Toutes"]
         ouvrages_m = []
