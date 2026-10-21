@@ -811,8 +811,9 @@ def afficher_programmes_pdf(supabase, projet_id, map_betonnages):
     st.markdown("---")
     st.subheader("📄 Programmes établis — PDF à signer")
     try:
-        res = supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id).execute()
-        eprouvettes = res.data or []
+        eprouvettes = projets_config.fetch_all(
+            supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id).order("id")
+        )
     except Exception as e:
         st.error(f"Erreur lors du chargement des programmes : {e}")
         return
@@ -1054,8 +1055,17 @@ def obtenir_infos_betonnage_parents_bulk(supabase, betonnage_ids):
     if not ids_valides:
         return {}
     try:
-        res = projets_config.filtrer_projet_actif(supabase.table("suivi_betonnage").select("*").in_("id", ids_valides)).execute()
-        return {p["id"]: p for p in (res.data or [])}
+        parents = {}
+        for i in range(0, len(ids_valides), 200):
+            lot = ids_valides[i:i + 200]
+            lignes = projets_config.fetch_all(
+                projets_config.filtrer_projet_actif(
+                    supabase.table("suivi_betonnage").select("*").in_("id", lot)
+                ).order("id")
+            )
+            for p in lignes:
+                parents[p["id"]] = p
+        return parents
     except Exception as e:
         st.warning(f"Note : Impossible de charger les fiches parentes en lot : {e}")
         return {}
@@ -1173,8 +1183,9 @@ def afficher_module_validation_admin(supabase, est_admin=False, peut_valider=Fal
         st.info("👁️ **Mode consultation** : la validation officielle, le rejet et la signature des PVs sont réservés aux responsables de chantier (droit `can_edit`) et à l'administrateur.")
 
     try:
-        res = supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).not_.is_("force_kn", "null").gt("force_kn", 0).order("id", desc=True).execute()
-        essais_realises = res.data or []
+        essais_realises = projets_config.fetch_all(
+            supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).not_.is_("force_kn", "null").gt("force_kn", 0).order("id", desc=True)
+        )
     except Exception as e:
         st.error(f"❌ Erreur de chargement des essais réalisés : {e}")
         return
@@ -1752,9 +1763,11 @@ def show(supabase):
 
     betonnages_preleves = []
     try:
-        res_b = supabase.table("suivi_betonnage").select("*").eq("projet_id", projet_id_actif).order("id", desc=True).execute()
-        if res_b.data:
-            betonnages_preleves = [b for b in res_b.data if b.get("prelevement") and str(b.get("prelevement")).upper().startswith("OUI")]
+        data_b = projets_config.fetch_all(
+            supabase.table("suivi_betonnage").select("*").eq("projet_id", projet_id_actif).order("id", desc=True)
+        )
+        if data_b:
+            betonnages_preleves = [b for b in data_b if b.get("prelevement") and str(b.get("prelevement")).upper().startswith("OUI")]
     except Exception as e:
         st.error(f"❌ Erreur lors du chargement des bétonnages : {e}")
 
@@ -1985,8 +1998,9 @@ def show(supabase):
                 )
                 if st.button("🔧 Recalculer et corriger toutes les dates d'écrasement", key="btn_fix_toutes_dates_ecrasement"):
                     try:
-                        res_fix = supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).execute()
-                        toutes_eprouvettes = res_fix.data or []
+                        toutes_eprouvettes = projets_config.fetch_all(
+                            supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).order("id")
+                        )
                     except Exception as e:
                         toutes_eprouvettes = []
                         st.error(f"Erreur lors du chargement : {e}")
@@ -2039,8 +2053,9 @@ def show(supabase):
                 )
                 if st.button("🔧 Recalculer et corriger toutes les références de contrôle", key="btn_fix_toutes_ref_controle"):
                     try:
-                        res_fix_ref = supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).execute()
-                        toutes_eprouvettes_ref = res_fix_ref.data or []
+                        toutes_eprouvettes_ref = projets_config.fetch_all(
+                            supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).order("id")
+                        )
                     except Exception as e:
                         toutes_eprouvettes_ref = []
                         st.error(f"Erreur lors du chargement : {e}")
@@ -2084,8 +2099,9 @@ def show(supabase):
 
             with st.expander("✏️ Modification / Ajustement d'une Programmation Existante", expanded=False):
                 try:
-                    res_p = supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).order("id", desc=True).execute()
-                    eprouvettes_enregistrees = res_p.data or []
+                    eprouvettes_enregistrees = projets_config.fetch_all(
+                        supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).order("id", desc=True)
+                    )
                 except Exception as e:
                     eprouvettes_enregistrees = []
                     st.error(f"Erreur lors du chargement des programmations : {e}")
@@ -2431,8 +2447,10 @@ def show(supabase):
 
         prog_counts = {}
         try:
-            res_deja = supabase.table("suivi_controle_beton").select("betonnage_id").eq("projet_id", projet_id_actif).execute()
-            for r in (res_deja.data or []):
+            lignes_deja = projets_config.fetch_all(
+                supabase.table("suivi_controle_beton").select("betonnage_id").eq("projet_id", projet_id_actif).order("id")
+            )
+            for r in lignes_deja:
                 b_id_v = r.get("betonnage_id")
                 if b_id_v: prog_counts[b_id_v] = prog_counts.get(b_id_v, 0) + 1
         except Exception as e:
@@ -2587,8 +2605,9 @@ def show(supabase):
 
         # Retards
         try:
-            res_retards = supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).lte("date_ecrasement", today_str).or_("force_kn.is.null,force_kn.eq.0").order("date_ecrasement", desc=False).execute()
-            retards_list = res_retards.data or []
+            retards_list = projets_config.fetch_all(
+                supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).lte("date_ecrasement", today_str).or_("force_kn.is.null,force_kn.eq.0").order("date_ecrasement", desc=False).order("id", desc=False)
+            )
         except Exception as e:
             retards_list = []
             st.warning(f"Note retards : {e}")
@@ -2610,8 +2629,12 @@ def show(supabase):
 
         # Jour et Semaine
         try:
-            eprouvettes_date_sel = supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).eq("date_ecrasement", date_filtre_str).order("id", desc=False).execute().data or []
-            eprouvettes_semaine = supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).gte("date_ecrasement", str(debut_semaine)).lte("date_ecrasement", str(fin_semaine)).order("date_ecrasement", desc=False).execute().data or []
+            eprouvettes_date_sel = projets_config.fetch_all(
+                supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).eq("date_ecrasement", date_filtre_str).order("id", desc=False)
+            )
+            eprouvettes_semaine = projets_config.fetch_all(
+                supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).gte("date_ecrasement", str(debut_semaine)).lte("date_ecrasement", str(fin_semaine)).order("date_ecrasement", desc=False).order("id", desc=False)
+            )
         except Exception as e:
             eprouvettes_date_sel, eprouvettes_semaine = [], []
             st.warning(f"Note chargement planning : {e}")
@@ -2636,18 +2659,17 @@ def show(supabase):
 
         try:
             if mode_admin:
-                res_att = supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).order("id", desc=False).execute()
-                eprouvettes_en_attente = res_att.data or []
+                eprouvettes_en_attente = projets_config.fetch_all(
+                    supabase.table("suivi_controle_beton").select("*").eq("projet_id", projet_id_actif).order("id", desc=False)
+                )
             else:
-                res_att = (
+                eprouvettes_en_attente = projets_config.fetch_all(
                     supabase.table("suivi_controle_beton")
                     .select("*")
                     .eq("projet_id", projet_id_actif)
                     .or_("force_kn.is.null,force_kn.eq.0")
                     .order("id", desc=False)
-                    .execute()
                 )
-                eprouvettes_en_attente = res_att.data or []
         except Exception as e:
             eprouvettes_en_attente = []
             st.error(f"Erreur de chargement des essais : {e}")
