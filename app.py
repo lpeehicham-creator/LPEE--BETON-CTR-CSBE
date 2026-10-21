@@ -1,4 +1,5 @@
 import datetime
+import hmac
 import json
 import os
 import time
@@ -125,13 +126,17 @@ if _qr_rec or _qr_bid:
 #     de récupérer les cookies déjà présents avant toute vérification,
 #  2) une courte pause après l'écriture d'un nouveau cookie, avant de
 #     recharger la vue, pour laisser le temps au navigateur de l'enregistrer.
-_REMEMBER_KEY_PAR_DEFAUT = "lpee_ctr_csb_remember_me_2026_a_changer"
+# SÉCURITÉ : aucune clé par défaut dans le code (elle serait lisible par tous et
+# permettrait de forger un cookie administrateur). Sans secret REMEMBER_SECRET_KEY
+# d'au moins 32 caractères, la fonction « Remember me » est DÉSACTIVÉE (la
+# connexion par mot de passe, elle, reste disponible).
 try:
     _cle_secrete = os.environ.get("REMEMBER_SECRET_KEY") or st.secrets.get("REMEMBER_SECRET_KEY")
 except Exception:
     _cle_secrete = os.environ.get("REMEMBER_SECRET_KEY")
-REMEMBER_SECRET_KEY = _cle_secrete or _REMEMBER_KEY_PAR_DEFAUT
-REMEMBER_KEY_PAR_DEFAUT = REMEMBER_SECRET_KEY == _REMEMBER_KEY_PAR_DEFAUT
+REMEMBER_SECRET_KEY = str(_cle_secrete or "")
+REMEMBER_ACTIF = len(REMEMBER_SECRET_KEY) >= 32
+REMEMBER_KEY_PAR_DEFAUT = not REMEMBER_ACTIF  # nom conservé : « clé non configurée »
 REMEMBER_SESSION_DUREE = datetime.timedelta(hours=4)
 REMEMBER_COOKIE_NAME = "remember_data"
 
@@ -157,6 +162,42 @@ def _generer_jeton_souvenir(username, role, can_edit, projets_autorises, issued_
 
 
 cookie_manager = stx.CookieManager(key="lpee_ctr_csb_cookie_manager")
+
+try:
+    INACTIVITE_MAX_SECONDES = int(float(st.secrets.get("SESSION_INACTIVITE_MIN", 60)) * 60)
+except Exception:
+    INACTIVITE_MAX_SECONDES = 3600
+
+
+@st.cache_resource
+def _registre_echecs():
+    """Registre partagé par toutes les sessions du serveur : 5 échecs de
+    connexion sur un même identifiant => blocage de 15 minutes."""
+    return securite.RegistreEchecs(seuil=5, duree_blocage=900, fenetre=900)
+
+
+def _deconnecter(message=None):
+    """Déconnexion réelle : vide la session ET supprime le cookie « Remember
+    me » (sinon la page se reconnecterait toute seule pendant 4 h, ce qui est
+    dangereux sur un poste partagé et fausse la traçabilité « qui a fait quoi »)."""
+    st.session_state["user"] = None
+    st.session_state["role"] = None
+    st.session_state["can_edit"] = False
+    st.session_state["_deconnecte"] = True  # bloque la reconnexion auto pendant ce rechargement
+    st.session_state.pop("_derniere_activite", None)
+    if message:
+        st.session_state["_msg_session"] = message
+    try:
+        cookie_manager.delete(REMEMBER_COOKIE_NAME, key="del_remember_data")
+    except Exception:
+        try:  # repli : écraser le cookie par une valeur vide déjà expirée
+            cookie_manager.set(
+                REMEMBER_COOKIE_NAME, "", key="clear_remember_data",
+                expires_at=datetime.datetime.now() - datetime.timedelta(days=1),
+            )
+        except Exception:
+            pass
+    time.sleep(0.4)  # laisser le navigateur appliquer la suppression (Safari/iOS)
 
 # Premier passage forcé : sur Safari/iOS notamment, le composant (chargé
 # dans un iframe) a besoin d'un premier aller-retour avant de renvoyer les
@@ -288,12 +329,10 @@ def generate_pdf_report(
 # 3. CONNEXION SUPABASE & GESTION BDD USERS
 # ==========================================
 try:
-  SUPABASE_URL = st.secrets.get(
-      "SUPABASE_URL", "https://votre-projet.supabase.co"
-  )
-  SUPABASE_KEY = st.secrets.get(
-      "SUPABASE_KEY", "sb_publishable_m8g5mocsCDgk3JpS1lpuCQ_3wOPyet1"
-  )
+  # Aucune valeur par défaut dans le code : URL et clé viennent uniquement des
+  # secrets Streamlit (.streamlit/secrets.toml en local).
+  SUPABASE_URL = st.secrets["SUPABASE_URL"]
+  SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
   # Code partagé exigé par la politique RLS sur suivi_betonnage (voir le SQL
   # fourni pour la page hors-ligne). L'app principale doit envoyer le même
   # en-tête que offline_betonnage.html, sinon ses propres insertions seraient
@@ -363,13 +402,15 @@ DEFAULT_USERS = {
 
 
 # Mots de passe « maîtres » historiques, conservés HACHÉS (plus en clair dans le
-# code). Pour les désactiver sans modifier le code : secret MOTS_DE_PASSE_MAITRES = "non".
+# code). DÉSACTIVÉS par défaut : ils ne s'activent que si le secret
+# MOTS_DE_PASSE_MAITRES vaut explicitement "oui" (déconseillé : ils permettent
+# de se connecter sous n'importe quel nom, ce qui fausse la traçabilité).
 MAITRE_ADMIN_HASH = "pbkdf2_sha256$600000$DYyayfl0+9MjoelPjW5z3Q==$mSNNZycey70SCnNbABMfRs/D7CdXgOc0nRylpOgrnmw="
 MAITRE_GENERIQUE_HASH = "pbkdf2_sha256$600000$OvT+wtQTSUl1z7jC4vn59w==$B8mPKwLEnrBjINdlqXL/jfe+tjmjskHO2C/chr4zBHk="
 try:
-    MOTS_DE_PASSE_MAITRES_ACTIFS = str(st.secrets.get("MOTS_DE_PASSE_MAITRES", "oui")).strip().lower() != "non"
+    MOTS_DE_PASSE_MAITRES_ACTIFS = str(st.secrets.get("MOTS_DE_PASSE_MAITRES", "non")).strip().lower() == "oui"
 except Exception:
-    MOTS_DE_PASSE_MAITRES_ACTIFS = True
+    MOTS_DE_PASSE_MAITRES_ACTIFS = False
 
 
 # Marqueur posé en base pour « supprimer » un compte historique (DEFAULT_USERS) :
@@ -500,7 +541,11 @@ if "can_edit" not in st.session_state:
 # ==========================================
 # 3bis. AUTO-CONNEXION VIA COOKIE "SE SOUVENIR DE MOI"
 # ==========================================
-if st.session_state["user"] is None:
+if (
+    st.session_state["user"] is None
+    and REMEMBER_ACTIF
+    and not st.session_state.get("_deconnecte")
+):
   _cookie_brut = cookie_manager.get(REMEMBER_COOKIE_NAME)
   if _cookie_brut:
     try:
@@ -512,33 +557,40 @@ if st.session_state["user"] is None:
       remembered_issued_at = payload.get("t")
       remembered_token = payload.get("k")
 
-      jeton_valide = bool(remembered_token) and _generer_jeton_souvenir(
-          remembered_user, remembered_role, remembered_can_edit,
-          remembered_projets, remembered_issued_at
-      ) == remembered_token
+      jeton_valide = bool(remembered_token) and hmac.compare_digest(
+          _generer_jeton_souvenir(
+              remembered_user, remembered_role, remembered_can_edit,
+              remembered_projets, remembered_issued_at
+          ),
+          str(remembered_token),
+      )
       session_expiree = True
       if jeton_valide:
         issued_at_dt = datetime.datetime.fromisoformat(remembered_issued_at)
         session_expiree = (datetime.datetime.utcnow() - issued_at_dt) > REMEMBER_SESSION_DUREE
 
       if jeton_valide and not session_expiree:
-        st.session_state["user"] = {
-            "username": remembered_user,
-            "role": remembered_role,
-            "can_edit": remembered_can_edit,
-            "projets_autorises": remembered_projets,
-        }
-        st.session_state["role"] = remembered_role
-        st.session_state["can_edit"] = remembered_can_edit
-        st.session_state["users_db"] = load_users()
-        # Le cookie peut dater de plusieurs heures : on reprend rôle et
-        # projets autorisés depuis la base (nouveau chantier créé, accès
-        # retiré...) pour qu'ils soient toujours à jour.
-        _rec = st.session_state["users_db"].get(remembered_user)
-        if _rec:
-          st.session_state["user"]["role"] = _rec["role"]
-          st.session_state["user"]["projets_autorises"] = _rec.get("projets_autorises", [])
-          st.session_state["role"] = _rec["role"]
+        _users_cookie = load_users()
+        _rec = _users_cookie.get(remembered_user)
+        # Compte supprimé ou désactivé depuis la création du cookie : refus.
+        # (Seule exception : session issue d'un mot de passe maître, si activé.)
+        if _rec is not None or MOTS_DE_PASSE_MAITRES_ACTIFS:
+          st.session_state["user"] = {
+              "username": remembered_user,
+              "role": remembered_role,
+              "can_edit": remembered_can_edit,
+              "projets_autorises": remembered_projets,
+          }
+          st.session_state["role"] = remembered_role
+          st.session_state["can_edit"] = remembered_can_edit
+          st.session_state["users_db"] = _users_cookie
+          # Le cookie peut dater de plusieurs heures : on reprend rôle et
+          # projets autorisés depuis la base (nouveau chantier créé, accès
+          # retiré...) pour qu'ils soient toujours à jour.
+          if _rec:
+            st.session_state["user"]["role"] = _rec["role"]
+            st.session_state["user"]["projets_autorises"] = _rec.get("projets_autorises", [])
+            st.session_state["role"] = _rec["role"]
     except (ValueError, TypeError, AttributeError, KeyError):
       pass
 
@@ -556,6 +608,9 @@ if st.session_state["user"] is None:
         st.image(Image.open(image_login_path).convert("RGB"), use_container_width=True)
       except Exception as e:
         st.error(f"Erreur lors de la lecture de l'image : {e}")
+    _msg_session = st.session_state.pop("_msg_session", None)
+    if _msg_session:
+      st.warning(_msg_session)
     st.title("🔐 Accès Restreint - LPEE")
     effets_ia.pastille_statut("Connexion sécurisée")
     st.caption("Veuillez saisir vos identifiants pour accéder à la plateforme.")
@@ -571,7 +626,9 @@ if st.session_state["user"] is None:
       password_input = st.text_input("Mot de passe", type="password")
       se_souvenir = st.checkbox(
           "🔒 Remember me (4h)",
-          value=True,
+          value=REMEMBER_ACTIF,
+          disabled=not REMEMBER_ACTIF,
+          help=None if REMEMBER_ACTIF else "Désactivé : secret REMEMBER_SECRET_KEY non configuré.",
       )
       submit_btn = st.form_submit_button(
           "Se connecter", use_container_width=True, type="primary"
@@ -584,7 +641,9 @@ if st.session_state["user"] is None:
         }
         st.session_state["role"] = role
         st.session_state["can_edit"] = can_edit
-        if se_souvenir:
+        st.session_state.pop("_deconnecte", None)
+        st.session_state["_derniere_activite"] = time.time()
+        if se_souvenir and REMEMBER_ACTIF:
           issued_at_iso = datetime.datetime.utcnow().isoformat()
           token = _generer_jeton_souvenir(
               username, role, can_edit, projets_autorises, issued_at_iso
@@ -605,7 +664,13 @@ if st.session_state["user"] is None:
         st.rerun()
 
 
-      if submit_btn:
+      _blocage_restant = _registre_echecs().secondes_restantes(username_input) if submit_btn else 0
+      if submit_btn and _blocage_restant > 0:
+        st.error(
+            "🔒 Trop de tentatives échouées pour ce compte. Réessayez dans"
+            f" {(_blocage_restant + 59) // 60} minute(s)."
+        )
+      elif submit_btn:
         fresh_users = load_users()
         st.session_state["users_db"] = fresh_users
 
@@ -619,12 +684,14 @@ if st.session_state["user"] is None:
           user_role = fresh_users[username_input]["role"]
           can_edit = fresh_users[username_input]["can_edit"]
           user_projets = fresh_users[username_input].get("projets_autorises", [])
+          _registre_echecs().reinitialiser(username_input)
           _connecter_et_memoriser(username_input, user_role, can_edit, user_projets)
         elif MOTS_DE_PASSE_MAITRES_ACTIFS and securite.verifier_mot_de_passe(password_input, MAITRE_ADMIN_HASH):
           username = username_input if username_input else "ADMIN"
           # L'admin voit tous les projets (cf. projets_config.liste_projets_utilisateur) :
           # la liste explicite n'est donc pas nécessaire ici, mais on la
           # renseigne quand même pour la cohérence du jeton signé.
+          _registre_echecs().reinitialiser(username_input)
           _connecter_et_memoriser(username, "admin", True, list(projets_config.charger_projets(supabase).keys()))
         elif MOTS_DE_PASSE_MAITRES_ACTIFS and securite.verifier_mot_de_passe(password_input, MAITRE_GENERIQUE_HASH):
           username = username_input if username_input else "USER"
@@ -632,13 +699,33 @@ if st.session_state["user"] is None:
           # donne accès qu'au projet d'origine, jamais automatiquement aux
           # nouveaux projets (qui nécessitent un compte nommé explicitement
           # autorisé, via Gestion Utilisateurs).
+          _registre_echecs().reinitialiser(username_input)
           _connecter_et_memoriser(username, "user", False, [projets_config.PROJET_PAR_DEFAUT])
         else:
-          st.error("❌ Nom d'utilisateur ou mot de passe incorrect.")
+          _bloque_maintenant = _registre_echecs().enregistrer_echec(username_input)
+          if _bloque_maintenant:
+            st.error(
+                "🔒 Trop de tentatives échouées : ce compte est bloqué"
+                f" {_bloque_maintenant // 60} minutes."
+            )
+          else:
+            st.error("❌ Nom d'utilisateur ou mot de passe incorrect.")
   st.stop()
 
 # Registre des chantiers (table Supabase `projets`), chargé une fois par session
 projets_config.charger_projets(supabase)
+
+# Expiration de session par inactivité (postes de laboratoire partagés).
+# Une session ouverte puis abandonnée ne reste pas utilisable indéfiniment.
+_maintenant_ts = time.time()
+_derniere_ts = st.session_state.get("_derniere_activite")
+if _derniere_ts is not None and (_maintenant_ts - _derniere_ts) > INACTIVITE_MAX_SECONDES:
+  _deconnecter(
+      f"⏱️ Session expirée après {INACTIVITE_MAX_SECONDES // 60} minutes d'inactivité."
+      " Veuillez vous reconnecter."
+  )
+  st.rerun()
+st.session_state["_derniere_activite"] = _maintenant_ts
 
 # Synchronisation du statut d'édition
 current_username = st.session_state["user"]["username"]
@@ -863,13 +950,8 @@ with st.sidebar:
 
   st.markdown("---")
   if st.button("🚪 Déconnexion", use_container_width=True):
-    st.session_state["user"] = None
-    st.session_state["role"] = None
-    st.session_state["can_edit"] = False
-    # NOTE : le cookie "se souvenir de moi" n'est PAS supprimé ici. Tant que
-    # la fenêtre de 4h (REMEMBER_SESSION_DUREE) n'est pas écoulée, revenir
-    # sur l'application reconnectera automatiquement sans redemander le mot
-    # de passe. Passé les 4h, le cookie expire et le mot de passe est requis.
+    # Déconnexion réelle : la session ET le cookie « Remember me » sont supprimés.
+    _deconnecter()
     st.rerun()
 
 
@@ -955,10 +1037,10 @@ elif page == "Gestion Utilisateurs" and current_role == "admin":
   else:
     st.success("🔒 Tous les mots de passe sont hachés.")
   if REMEMBER_KEY_PAR_DEFAUT:
-    st.warning(
-        "⚠️ La clé de signature du cookie « Remember me » est encore la valeur par défaut"
-        " du code. Définissez un secret **REMEMBER_SECRET_KEY** (longue chaîne aléatoire)"
-        " dans les secrets Streamlit, sinon un cookie falsifié pourrait être accepté."
+    st.info(
+        "ℹ️ La fonction « Remember me » est désactivée : le secret **REMEMBER_SECRET_KEY**"
+        " (chaîne aléatoire d'au moins 32 caractères) n'est pas défini dans les secrets"
+        " Streamlit. La connexion par mot de passe fonctionne normalement."
     )
   if MOTS_DE_PASSE_MAITRES_ACTIFS:
     st.warning(
@@ -1513,7 +1595,7 @@ elif page == "Mon équipe" and current_role == "responsable_chantier":
     st.subheader("➕ Ajouter une personne à ce chantier")
     with st.form(f"form_ajout_membre_{pid_eq}", clear_on_submit=True):
       nm = st.text_input("Nom d'utilisateur", placeholder="ex : A.ALAMI")
-      pw = st.text_input("Mot de passe (8 caractères minimum)", type="password")
+      pw = st.text_input(f"Mot de passe ({securite.LONGUEUR_MINI} caractères minimum)", type="password")
       rl = st.selectbox("Rôle", list(_roles_ajout.keys()), format_func=lambda r: _roles_ajout[r])
       ce = st.checkbox(
           "Droit de modification", value=True,
