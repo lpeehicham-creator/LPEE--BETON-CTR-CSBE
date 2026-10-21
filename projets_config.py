@@ -94,8 +94,8 @@ def charger_projets(supabase, force=False):
     try:
         if not supabase:
             raise RuntimeError("Supabase non configuré")
-        res = supabase.table("projets").select("*").execute()
-        for row in res.data or []:
+        lignes_projets = fetch_all(supabase.table("projets").select("*").order("id"))
+        for row in lignes_projets:
             if row.get("actif", True):
                 registre[row["id"]] = {
                     "nom": row.get("nom") or row["id"],
@@ -364,6 +364,27 @@ def num_reception_depart(projet_id=None):
     return _entier_positif((get_projets().get(pid) or {}).get("num_reception_depart"))
 
 
+def fetch_all(query, taille=1000):
+    """Exécute une requête Supabase en la paginant (.range) et renvoie TOUTES
+    les lignes sous forme de liste. Contourne le plafond « Max rows » de
+    l'API (1000 lignes par défaut), qui tronque les résultats sans erreur.
+
+    `query` : requête de lecture construite SANS .execute().
+    Elle doit avoir un .order() stable (ex. .order("id")), sinon des lignes
+    peuvent être sautées ou répétées d'une page à l'autre. Si le tri porte
+    sur une colonne non unique, ajouter .order("id") en second critère.
+    `taille` doit rester <= au réglage « Max rows » de Supabase."""
+    lignes, debut = [], 0
+    while True:
+        res = query.range(debut, debut + taille - 1).execute()
+        bloc = res.data or []
+        lignes.extend(bloc)
+        if len(bloc) < taille:  # dernière page
+            break
+        debut += taille
+    return lignes
+
+
 def prochain_num_reception(supabase, projet_id):
     """Prochain N° de réception du chantier : le plus grand des deux entre le
     N° de démarrage défini sur le chantier (1 par défaut) et le plus grand N°
@@ -372,23 +393,16 @@ def prochain_num_reception(supabase, projet_id):
     Retourne un entier, ou None si la base est inaccessible."""
     try:
         plus_grand = 0
-        debut = 0
-        while True:  # pagination : Supabase renvoie 1000 lignes au maximum
-            res = (
-                supabase.table("suivi_betonnage")
-                .select("num_reception")
-                .eq("projet_id", projet_id)
-                .range(debut, debut + 999)
-                .execute()
-            )
-            lignes = res.data or []
-            for ligne in lignes:
-                val = str(ligne.get("num_reception") or "").strip()
-                if val.isdigit():
-                    plus_grand = max(plus_grand, int(val))
-            if len(lignes) < 1000:
-                break
-            debut += 1000
+        lignes = fetch_all(
+            supabase.table("suivi_betonnage")
+            .select("num_reception")
+            .eq("projet_id", projet_id)
+            .order("id")
+        )
+        for ligne in lignes:
+            val = str(ligne.get("num_reception") or "").strip()
+            if val.isdigit():
+                plus_grand = max(plus_grand, int(val))
         return max(num_reception_depart(projet_id) or 1, plus_grand + 1)
     except Exception:
         return None
@@ -607,8 +621,10 @@ def supprimer_projet(supabase, projet_id):
         supabase.table("suivi_betonnage").delete().eq("projet_id", projet_id).execute()
         supabase.table("projets").delete().eq("id", projet_id).execute()
         # Retirer ce chantier des accès de tous les utilisateurs
-        res = supabase.table("app_users").select("username, projets_autorises").execute()
-        for row in res.data or []:
+        lignes_users = fetch_all(
+            supabase.table("app_users").select("username, projets_autorises").order("username")
+        )
+        for row in lignes_users:
             liste = [p.strip() for p in (row.get("projets_autorises") or "").split(",") if p.strip()]
             if projet_id in liste:
                 liste.remove(projet_id)
