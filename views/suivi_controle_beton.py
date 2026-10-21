@@ -157,29 +157,10 @@ def role_autorise_validation(role):
 
 
 def connecter_utilisateur(supabase, nom_utilisateur, mot_de_passe):
-    """Vérifie l'utilisateur et initialise le session_state."""
-    try:
-        res = (
-            supabase.table("users")
-            .select("*")
-            .eq("username", nom_utilisateur)
-            .eq("password", mot_de_passe)
-            .execute()
-        )
-        if res.data:
-            u = res.data[0]
-            st.session_state.update({
-                "user_logged": True,
-                "user": u,
-                "username": u.get("username"),
-                "role": u.get("role"),
-                "user_role": u.get("role"),
-                "can_edit": bool(u.get("can_edit", False)) or role_autorise_validation(u.get("role")),
-            })
-            return True
-        st.error("Nom d'utilisateur ou mot de passe incorrect.")
-    except Exception as e:
-        st.error(f"Erreur lors de la connexion : {e}")
+    """Ancienne connexion directe (comparaison de mot de passe EN CLAIR dans la
+    table 'users') : DÉSACTIVÉE pour des raisons de sécurité. La seule connexion
+    valide est celle de app.py (mots de passe hachés, table app_users)."""
+    st.error("Connexion directe désactivée : utilisez l'application principale.")
     return False
 
 
